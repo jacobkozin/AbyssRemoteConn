@@ -1,0 +1,126 @@
+:root{color-scheme:dark;--bg:#080d16;--panel:#111927;--panel2:#152032;--stroke:#2b3b52;--text:#edf5ff;--sub:#9eacc2;--aqua:#6dded7;--blue:#83a9ff;--danger:#ff94a0}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;color:var(--text);background:radial-gradient(circle at 50% -15%,#203149 0%,var(--bg) 48%);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}button,select{-webkit-tap-highlight-color:transparent}.hidden{display:none!important}
+.bar{height:68px;padding:10px clamp(15px,2.5vw,38px);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ffffff14;background:#0b101bcf;gap:12px}.brand{display:flex;gap:11px;align-items:center}.logo{height:40px;width:40px;display:grid;place-items:center;border:1px solid #63d9dc7d;background:linear-gradient(140deg,#183b53,#132531);border-radius:11px;font-size:26px;font-weight:900;color:var(--aqua)}.brand b{font-size:15px;letter-spacing:1.8px;white-space:nowrap}.brand em{font-style:normal;color:var(--aqua)}.brand small{display:block;color:var(--sub);font-size:9px;letter-spacing:1.9px;margin-top:1px}.top-right{display:flex;gap:12px;align-items:center}.status{font-size:12px;color:var(--sub)}.status.connected:before{background:#63dfad}.status:before{content:"";width:7px;height:7px;display:inline-block;background:#f0b95f;border-radius:50%;margin-right:8px}
+main{width:100%;padding:16px clamp(10px,1.7vw,28px)}.pair-view{display:flex;justify-content:center;padding:4vh 0}.pair-card{width:min(100%,480px);border:1px solid var(--stroke);border-radius:22px;background:linear-gradient(160deg,#192437,#101725);padding:clamp(23px,5vw,42px);box-shadow:0 26px 90px #0006}.hero-icon{font-size:30px;color:var(--aqua);border:1px solid var(--stroke);width:62px;height:62px;display:grid;place-items:center;border-radius:18px}.eyebrow{letter-spacing:2.1px;font-size:10px;font-weight:750;color:var(--aqua);margin-top:22px}h1{line-height:1.12;letter-spacing:-1.5px;font-size:clamp(31px,4vw,47px);margin:10px 0 19px}h1 span{color:var(--aqua)}p{color:var(--sub);line-height:1.65}.pair-card form{display:grid;gap:9px;margin-top:23px}.pair-card label,.toolbar label,.zoomline label{font-size:10px;letter-spacing:1px;font-weight:750;color:var(--sub)}input,select{background:#0a1020;color:var(--text);border:1px solid #334057;border-radius:10px;padding:11px;min-width:0}.pair-card input{margin-bottom:10px}.pair-card input#pairCode{font-size:26px;letter-spacing:5px;text-align:center;font-variant-numeric:tabular-nums}.primary{border:0;background:linear-gradient(110deg,#5bd1d6,#83a9ff);padding:12px 17px;color:#051324;font-weight:800;border-radius:10px}.primary:hover{filter:brightness(1.08)}.primary.small{padding:10px 16px}.ghost,.toolbutton,.controlbar button{background:#1a2739;color:var(--text);border:1px solid #34465c;border-radius:10px;padding:9px 12px}.ghost:hover,.toolbutton:hover,.controlbar button:hover{background:#294059}.error{min-height:8px;color:var(--danger);font-size:12px;margin:0}.footnote{font-size:11px}.pair-card kbd{padding:2px 6px;border:1px solid var(--stroke);border-radius:4px;color:var(--text)}
+.remote{display:flex;flex-direction:column;gap:9px;min-width:0}.session-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}.session-title{display:flex;align-items:center;gap:10px}.session-dot{width:9px;height:9px;flex:none;background:#6edac1;border-radius:50%;box-shadow:0 0 0 4px #6edac11c}.session-title strong{font-size:14px;display:block}.session-title span:last-child{font-size:11px;display:block;color:var(--sub)}.session-actions{display:flex;gap:7px}.toolbutton{font-size:12px;font-weight:650;white-space:nowrap}.toolbutton.accent{border-color:#62cfcf63;color:#a5fff5}.toolbar{display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap;padding:12px;border:1px solid #26374b;background:#121d2c;border-radius:12px}.toolbar label{display:flex;flex-direction:column;gap:5px;min-width:100px}.toolbar select{max-width:170px;font-size:12px;letter-spacing:0;padding:7px 10px}.desktop-stage{position:relative;width:100%;height:clamp(320px,68dvh,1150px);overflow:hidden;border:1px solid #30445e;border-radius:12px;background:#03060c;box-shadow:0 14px 36px #0007;isolation:isolate}.screen-scroller{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;touch-action:pan-x pan-y}.screen-surface{position:relative;min-width:100%;min-height:100%;width:100%;height:100%}.screen-surface canvas{position:absolute;display:block;max-width:none;touch-action:none;cursor:crosshair;background:#0b1422;user-select:none;-webkit-user-select:none}.screen-overlay{pointer-events:none;position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-size:14px;background:#080d17e0;color:var(--sub);padding:18px}.screen-corner{position:absolute;top:10px;left:10px;pointer-events:none;border:1px solid #ffffff15;border-radius:5px;background:#08111bb3;color:#a2c4cb;letter-spacing:1.6px;font-size:9px;padding:4px 7px;opacity:.7}.exit-immersive{position:absolute;right:12px;top:12px;z-index:8;border:1px solid #ffffff52;color:#fff;background:#0b1424dd;border-radius:9px;padding:10px 12px;font-size:12px;backdrop-filter:blur(8px)}.controlbar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 5px;scrollbar-width:thin}.controlbar button{white-space:nowrap;min-width:47px;font-weight:650;padding:9px 12px}.controlbar button span{font-size:11px;font-weight:450}.lowerbar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}.sendline,.zoomline{display:flex;gap:8px;align-items:center}.sendline{flex:1 1 280px}.sendline input{width:100%}.zoomline{flex:1 1 auto;justify-content:flex-end;flex-wrap:wrap;font-size:12px}.zoomline input{width:105px;accent-color:var(--aqua)}.zoomline button{white-space:nowrap;font-size:12px}.hint{margin:0;font-size:11px;color:#8395ad;line-height:1.55}.hint strong{color:#cbd9e8}.devices-panel{border:1px solid var(--stroke);background:#101a2a;border-radius:12px;padding:16px}.devices-panel h2{font-size:18px;margin:0 0 12px}.device-entry{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff1c;padding:12px 0;gap:12px}.device-entry small{display:block;color:var(--sub);margin-top:4px}.device-entry button{color:var(--danger)}footer{color:#71829d;letter-spacing:1.3px;font-size:10px;text-align:center;margin:10px 0 20px}footer span{color:var(--aqua)}.divider-dot{padding:0 12px;color:#5c6b86}
+/* Safari on iPhone cannot fullscreen arbitrary HTML elements in all versions. Immersive mode
+   is a real viewport-filling CSS fallback, not a fake Fullscreen API success message. */
+body.immersive{overflow:hidden}body.immersive .bar,body.immersive footer,body.immersive .session-head,body.immersive .toolbar,body.immersive .controlbar,body.immersive .lowerbar,body.immersive .hint,body.immersive #remoteError,body.immersive .devices-panel{display:none!important}body.immersive main{position:fixed;inset:0;z-index:10;margin:0;padding:0;max-width:none}body.immersive .remote{height:100%;display:block}body.immersive .desktop-stage{height:100%;height:100dvh;border:0;border-radius:0;box-shadow:none}body.immersive .screen-corner{top:max(8px,env(safe-area-inset-top))}body.immersive .exit-immersive{top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:block!important}
+@media(max-width:700px){.bar{height:59px;padding:9px 12px}.logo{height:34px;width:34px;font-size:21px}.brand b{font-size:12px;letter-spacing:1.3px}.brand small{font-size:8px;letter-spacing:1px}.status{font-size:10px}.top-right{gap:6px}.top-right .ghost{padding:7px;font-size:11px}main{padding:9px 8px}.session-head{gap:6px}.session-title strong{font-size:12px}.session-title span:last-child{font-size:10px}.session-actions{gap:5px}.toolbutton{padding:7px 8px;font-size:12px}.toolbutton span{display:none}.desktop-stage{height:clamp(230px,53dvh,620px)}.toolbar{padding:8px;gap:7px}.toolbar label{min-width:92px}.toolbar select{max-width:150px}.controlbar button{padding:10px 11px}.controlbar button span{display:none}.zoomline{justify-content:flex-start}.lowerbar{gap:9px}.hint{font-size:10px}}
+@media(max-width:700px) and (orientation:landscape){.desktop-stage{height:calc(100dvh - 135px);min-height:160px}.bar{height:42px}.brand small{display:none}.logo{height:28px;width:28px;font-size:19px}main{padding:5px 8px}.session-head{min-height:30px}.toolbar{max-height:140px;overflow:auto}}
+
+/* R3.1: Sharp-only output, premium immersed bezel, iPhone text keyboard. */
+.clarity-chip{display:inline-flex;align-items:center;align-self:flex-end;min-height:36px;padding:8px 12px;border-radius:10px;border:1px solid #62d8d27c;background:linear-gradient(115deg,#0b333b,#172942);color:#abfef3;letter-spacing:1px;font-weight:800;font-size:10px;white-space:nowrap;box-shadow:inset 0 0 14px #49cfc815}
+.keyboard-trigger{border-color:#5adcd6!important;color:#c4fff9!important;background:linear-gradient(125deg,#16363c,#19334f)!important}.keyboard-trigger:active,.dock-keyboard:active{transform:scale(.98)}
+.immersive-chrome{display:none}
+.keyboard-sheet{position:fixed;z-index:30;bottom:calc(14px + var(--keyboard-offset,0px));right:14px;left:auto;width:min(520px,calc(100vw - 28px));border:1px solid #5bcfd5a8;border-radius:18px;padding:16px;background:linear-gradient(150deg,#192e42f5,#091421fa);box-shadow:0 12px 70px #000c,0 0 40px #4bcdcf24;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.keyboard-sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.keyboard-sheet-head>div{display:flex;flex-direction:column}.keyboard-eyebrow{font-size:10px;letter-spacing:2px;color:#6de9dd;font-weight:800}.keyboard-sheet-head strong{font-size:17px;letter-spacing:-.35px}.keyboard-close{background:#172a3b;color:#e9ffff;border:1px solid #537088;border-radius:10px;width:38px;height:36px}.keyboard-sheet p{margin:10px 0;font-size:12px;line-height:1.5;color:#a2bace}.keyboard-sheet textarea{display:block;resize:vertical;max-height:145px;min-height:68px;width:100%;font-size:16px;line-height:1.4;border:1px solid #567189;border-radius:11px;outline-color:#5fd9d6;background:#07111d;color:#eefbff;padding:12px;overscroll-behavior:contain}.keyboard-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px}.keyboard-actions button:not(.primary){background:#20364a;color:#e2f3ff;border:1px solid #3a536a;border-radius:9px;padding:9px 12px}.keyboard-actions .primary{margin-left:auto;padding:9px 13px}.keyboard-status{min-height:15px;font-size:11px;color:#79dfd1;margin-top:7px}
+/* The inset content frame is deliberately away from iOS's physical top edge.
+   CSS cannot disable Notification Center, Control Center, or navigation gestures. */
+body.immersive{background:#060c16;overscroll-behavior:none;--frame-top:calc(64px + env(safe-area-inset-top,0px));--frame-bottom:calc(71px + env(safe-area-inset-bottom,0px))}
+body.immersive main{background:radial-gradient(ellipse at 50% -20%,#23475a 0%,#060c15 64%);touch-action:manipulation}
+body.immersive .remote{position:relative;height:100%;min-height:0}
+body.immersive .desktop-stage{position:absolute;top:var(--frame-top);bottom:var(--frame-bottom);left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));width:auto;height:auto;min-height:0;border:2px solid #4ca6b8;border-radius:13px;box-shadow:0 0 0 3px #07121e,0 0 0 5px #467b994f,0 0 22px #4dcee62f,inset 0 0 16px #10253e;overflow:hidden}
+body.immersive .desktop-stage::after{content:"";position:absolute;inset:0;border-radius:10px;pointer-events:none;z-index:7;background:linear-gradient(90deg,#60e7e432,transparent 2.5%,transparent 97.5%,#60e7e432),linear-gradient(180deg,#60e7e429,transparent 2.5%,transparent 97.5%,#60e7e429);box-shadow:inset 0 0 0 1px #ffffff1c}
+body.immersive .screen-corner{top:8px;left:8px;opacity:.85}
+body.immersive .immersive-chrome{display:flex;align-items:center;position:absolute;left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));z-index:12}
+body.immersive .immersive-top{top:calc(7px + env(safe-area-inset-top,0px));height:44px;gap:9px;padding:0 120px 0 12px;pointer-events:none}
+body.immersive .frame-glyph{width:27px;height:27px;display:grid;place-items:center;color:#89fff3;border:1px solid #65c4d188;border-radius:8px;font-size:17px;background:#1b3747}
+body.immersive .frame-label{white-space:nowrap;font-weight:850;letter-spacing:1.4px;font-size:12px;color:#f0ffff}
+body.immersive .frame-label b{color:#7be9e3}
+body.immersive .frame-label small{font-size:9px;letter-spacing:.6px;color:#84a7b8;font-weight:500}
+body.immersive .frame-lines{height:1px;flex:1;min-width:8px;background:linear-gradient(90deg,#67ead0aa,transparent)}
+body.immersive .exit-immersive{display:block!important;top:calc(14px + env(safe-area-inset-top,0px));right:calc(19px + env(safe-area-inset-right,0px));padding:7px 11px;border-color:#4f859b;background:#122b3d;font-weight:650;z-index:15}
+body.immersive .immersive-dock{bottom:calc(5px + env(safe-area-inset-bottom,0px));height:54px;justify-content:center;gap:8px;background:linear-gradient(90deg,transparent,#102b3b77 20%,#102b3b77 80%,transparent);border-top:1px solid #4b9cb441}
+body.immersive .immersive-dock button{min-width:42px;height:37px;background:#173045;color:#e1f9ff;border:1px solid #3f7189;border-radius:10px;padding:0 11px;font-weight:650;white-space:nowrap}
+body.immersive .immersive-dock .dock-keyboard{border-color:#5bd8d7;background:linear-gradient(115deg,#21585b,#1c4360);color:#e4fffc}
+body.immersive .dock-pip{height:6px;width:6px;border-radius:50%;background:#59ebd2;box-shadow:0 0 12px #59ebd2}
+body.immersive .keyboard-sheet{bottom:calc(var(--keyboard-offset,0px) + 65px + env(safe-area-inset-bottom,0px));right:max(12px,env(safe-area-inset-right,0px));left:max(12px,env(safe-area-inset-left,0px));width:auto;max-width:550px;margin:0 auto;max-height:calc(100dvh - 100px);overflow:auto}
+body.immersive .keyboard-sheet:focus-within{scroll-margin-top:0}
+@media(max-width:550px){body.immersive .frame-label small{display:none}body.immersive .immersive-top{padding-right:84px}body.immersive .exit-immersive{font-size:11px}body.immersive .immersive-dock button{padding:0 9px;font-size:12px}.keyboard-sheet{left:8px;right:8px;width:auto;padding:12px}.keyboard-sheet p{font-size:11px}}
+@media(max-width:700px) and (orientation:landscape){body.immersive{--frame-top:calc(52px + env(safe-area-inset-top,0px));--frame-bottom:calc(48px + env(safe-area-inset-bottom,0px))}body.immersive .immersive-top{height:35px;top:calc(4px + env(safe-area-inset-top,0px))}body.immersive .exit-immersive{top:calc(6px + env(safe-area-inset-top,0px))}body.immersive .immersive-dock{height:43px;bottom:calc(1px + env(safe-area-inset-bottom,0px))}body.immersive .immersive-dock button{height:32px}body.immersive .keyboard-sheet{bottom:calc(var(--keyboard-offset,0px) + 44px + env(safe-area-inset-bottom,0px))}body.immersive .keyboard-sheet textarea{min-height:48px;max-height:85px}}
+
+/* R3.2 -- DESKTOP-FIRST MOBILE CLIENT.
+   Stream is the background, controls are ephemeral; only the touch handle
+   is permanently visible. iOS browser/system chrome cannot be forcibly hidden. */
+html.remote-immersive,html.remote-immersive body{height:100%;width:100%;overflow:hidden!important;overscroll-behavior:none}
+body.immersive{--frame-top:0px;--frame-bottom:0px;background:#000;overscroll-behavior:none}
+body.immersive main{position:fixed;inset:0;background:#000;padding:0;margin:0;overflow:hidden}
+body.immersive .remote{position:absolute;inset:0;height:100%;min-height:0}
+body.immersive .desktop-stage{position:absolute!important;inset:0!important;top:0!important;right:0!important;bottom:0!important;left:0!important;width:100vw!important;height:100%!important;height:100dvh!important;min-height:0!important;max-height:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#000;overflow:hidden}
+body.immersive .desktop-stage::after{display:none!important}
+body.immersive .immersive-chrome,body.immersive .exit-immersive,body.immersive .screen-corner{display:none!important}
+body.immersive .screen-scroller{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+body.immersive #desktop{touch-action:none;-webkit-user-select:none;user-select:none}
+.quick-toggle,.quick-panel{display:none}
+body.immersive .quick-toggle{display:flex;position:fixed;right:calc(9px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:35;align-items:center;gap:6px;background:linear-gradient(145deg,#0c2735e8,#0b1423d9);color:#d9fafc;border:1px solid #50e8df74;border-radius:99px;padding:7px 11px 7px 7px;box-shadow:0 5px 26px #000a,0 0 0 2px #04101f55;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:11px;font-weight:700;letter-spacing:.4px;min-height:34px}
+.quick-toggle-icon{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;color:#03222e;background:linear-gradient(145deg,#55eadc,#a6deff);font-size:15px;font-weight:900}
+.quick-toggle:focus-visible,body.immersive .quick-panel button:focus-visible{outline:2px solid white;outline-offset:2px}
+body.immersive .quick-panel:not(.hidden){display:flex;position:fixed;z-index:34;right:calc(9px + env(safe-area-inset-right,0px));bottom:calc(55px + env(safe-area-inset-bottom,0px));width:min(360px,calc(100vw - 18px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));max-height:min(76dvh,510px);overflow:auto;flex-direction:column;gap:11px;padding:14px;background:linear-gradient(165deg,#172a3bef,#091622f2);border:1px solid #5acbd39c;border-radius:19px;color:#e5faff;box-shadow:0 14px 75px #000d,0 0 36px #52cac325;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);overscroll-behavior:contain}
+.quick-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.quick-panel-head>div{display:flex;flex-direction:column;gap:2px}
+.quick-panel-head strong{font-size:17px;letter-spacing:-.4px}
+.quick-panel-head small{font-size:11px;color:#a0c1d4}
+.quick-eyebrow{font-size:9px;font-weight:800;letter-spacing:1.8px;color:#77ede1}
+.quick-panel button{color:#e5faff;border:1px solid #466278;border-radius:10px;background:#1b3546;padding:9px;font-size:12px;font-weight:650}
+.quick-panel-head button{width:36px;height:34px}
+.quick-primary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.quick-primary button{min-height:43px;display:flex;align-items:center;justify-content:center;gap:7px}
+.quick-primary button.quick-accent{background:linear-gradient(125deg,#1e5d60,#204761);border-color:#5ad6cd}
+.quick-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.quick-options label{font-size:10px;font-weight:700;color:#a9c5d6;display:flex;flex-direction:column;gap:5px;letter-spacing:.45px}
+.quick-options label.quick-display-label{grid-column:span 2}
+.quick-options select{max-width:none;width:100%;font-size:12px;padding:9px 7px;min-height:39px}
+.quick-bottom{display:flex;gap:8px}.quick-bottom button{flex:1}
+.quick-help{font-size:10px;line-height:1.5;color:#a4b7c6;margin:0}
+body.immersive .keyboard-sheet{position:fixed;z-index:40;right:calc(9px + env(safe-area-inset-right,0px));left:calc(9px + env(safe-area-inset-left,0px));bottom:calc(54px + var(--keyboard-offset,0px) + env(safe-area-inset-bottom,0px));width:auto;max-width:580px;margin:auto;max-height:min(66dvh,420px);overflow:auto}
+@media (orientation:landscape) and (max-height:470px){
+  body.immersive .quick-panel:not(.hidden){max-height:calc(100dvh - 65px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));width:min(430px,60vw);gap:7px;padding:10px}
+  body.immersive .quick-toggle{right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+  body.immersive .quick-panel:not(.hidden){right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(45px + env(safe-area-inset-bottom,0px))}
+  body.immersive .keyboard-sheet{bottom:calc(44px + var(--keyboard-offset,0px) + env(safe-area-inset-bottom,0px));max-height:70dvh}
+}
+
+
+/* R3.3: Comfortable immersive desktop. Desktop edges and iOS gesture zones
+   stay visible, while the FIT display mode preserves every pixel by default.
+   Users can still explicitly select FILL if cropping is preferred. */
+body.immersive main {
+  background:radial-gradient(ellipse at 50% 40%, #17323c 0%, #07111e 63%, #030711 100%)!important;
+}
+body.immersive .desktop-stage {
+  top:calc(19px + env(safe-area-inset-top, 0px))!important;
+  right:calc(15px + env(safe-area-inset-right, 0px))!important;
+  bottom:calc(19px + env(safe-area-inset-bottom, 0px))!important;
+  left:calc(15px + env(safe-area-inset-left, 0px))!important;
+  width:auto!important;
+  height:auto!important;
+  border:1px solid #397b8b!important;
+  border-radius:13px!important;
+  box-shadow:0 0 0 1px #76ebec22, 0 15px 45px #0009, 0 0 34px #3eaeab22!important;
+  background:#02060d!important;
+}
+body.immersive .quick-toggle {
+  bottom:calc(23px + env(safe-area-inset-bottom,0px));
+  right:calc(24px + env(safe-area-inset-right,0px));
+}
+body.immersive .quick-panel:not(.hidden) {
+  bottom:calc(65px + env(safe-area-inset-bottom,0px));
+  right:calc(24px + env(safe-area-inset-right,0px));
+}
+@media (orientation:landscape) and (max-height:470px) {
+  body.immersive .desktop-stage {
+    top:calc(11px + env(safe-area-inset-top,0px))!important;
+    right:calc(11px + env(safe-area-inset-right,0px))!important;
+    bottom:calc(11px + env(safe-area-inset-bottom,0px))!important;
+    left:calc(11px + env(safe-area-inset-left,0px))!important;
+  }
+  body.immersive .quick-toggle {
+    right:calc(20px + env(safe-area-inset-right,0px));
+    bottom:calc(19px + env(safe-area-inset-bottom,0px));
+  }
+  body.immersive .quick-panel:not(.hidden) {
+    right:calc(20px + env(safe-area-inset-right,0px));
+    bottom:calc(58px + env(safe-area-inset-bottom,0px));
+  }
+}

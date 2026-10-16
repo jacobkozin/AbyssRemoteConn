@@ -1,0 +1,66 @@
+# .NET and generated build output
+**/bin/
+**/obj/
+/dist/
+/artifacts/
+/TestResults/
+/coverage/
+/coverage-*/
+*.coverage
+*.coveragexml
+*.lcov
+*.dll
+*.exe
+*.pdb
+*.deps.json
+*.runtimeconfig.json
+*.staticwebassets.*
+
+# IDE and editor state
+/.vs/
+/.vscode/
+/.idea/
+*.user
+*.suo
+
+# Runtime state, credentials, and certificates
+settings.json
+**/settings.json
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+*.der
+*.snk
+
+# Logs, dumps, databases, and temporary data
+*.log
+*.dmp
+*.db
+*.sqlite
+*.sqlite3
+*.tmp
+*.temp
+*.bak
+*~
+
+# Legacy handoff and patch-backup material
+/handoffs/
+/handoff-baseline.json
+/.abyss-patch-backups/
+/_abyss_patch_backups/
+
+# Package/dependency caches
+/packages/
+**/node_modules/
+*.nupkg
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
