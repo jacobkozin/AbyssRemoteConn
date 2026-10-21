@@ -16,7 +16,7 @@ const SETTINGS_KEY = 'abyss-remote:settings';
 
 const state = {
   csrf: null, myId: null, active: false, stopped: false, features: {},
-  mode: 'desktop', gameAvailable: false, soundOn: false, audio: null,
+  mode: 'desktop', gameAvailable: false, fallbackNotice: '', soundOn: false, audio: null,
   displays: [], display: 0, preferredDisplay: null,
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
   zoom: 100, frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
@@ -138,14 +138,14 @@ async function detectGameMode() {
   setStreamMode(state.gameAvailable ? state.mode : 'desktop', { restart: false });
 }
 
-function setStreamMode(mode, { restart = true } = {}) {
+function setStreamMode(mode, { restart = true, remember = true } = {}) {
   state.mode = mode === 'game' && state.gameAvailable ? 'game' : 'desktop';
   document.body.classList.toggle('game-mode', state.mode === 'game');
   $('streamMode').value = state.mode;
   $('quickStreamMode').value = state.mode;
   $('quickGameHeight').value = $('gameHeightPick').value;
   if (state.mode !== 'game') { hideCursor(); if (document.pointerLockElement) document.exitPointerLock(); }
-  saveSettings();
+  if (remember) saveSettings();
   if (restart) restartVideo();
 }
 async function getDisplays() {
@@ -300,6 +300,7 @@ function openVideo(epoch) {
         if (epoch !== state.epoch) return;
         state.desktopWidth = config.desktopWidth;
         state.desktopHeight = config.desktopHeight;
+        if ($('remoteError').textContent === state.fallbackNotice) showError(''); // Game mode works again
       },
       onCursor: (cursor) => { if (epoch === state.epoch) moveCursor(cursor); },
       onCursorImage: (image) => { if (epoch === state.epoch) setCursorImage(image); },
@@ -327,12 +328,11 @@ function connectionLost(which, code, reason = '') {
   if (!state.active || state.stopped) return;
   if (code === CLOSE_REVOKED) { showPair('This device was signed out or revoked. Pair it again with a new code.'); return; }
   if (code === CLOSE_UNSUPPORTED && which === 'video') {
-    // The PC cannot do Game mode for this monitor: fall back to Desktop mode and say why.
-    state.gameAvailable = false;
-    $('streamModeLabel').classList.add('hidden');
-    $('quickStreamModeLabel').classList.add('hidden');
-    setStreamMode('desktop');
-    showError(`Game mode is not available: ${reason || 'no hardware video encoder'}. Using Desktop mode.`);
+    // Game mode failed for this monitor: fall back to Desktop mode and say why. The choice
+    // stays available (and remembered) so it can be tried again, e.g. on another monitor.
+    setStreamMode('desktop', { remember: false });
+    state.fallbackNotice = `Game mode is not available: ${reason || 'no hardware video encoder'}. Using Desktop mode.`;
+    showError(state.fallbackNotice);
     return;
   }
   if (code === CLOSE_REPLACED) {

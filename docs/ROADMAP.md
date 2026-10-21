@@ -38,9 +38,9 @@ marked _(device)_ still need a real iPhone or iPad, and that has not happened ye
 
 ## Input
 
-- [x] Mouse (absolute and trackpad-style), smooth wheel, keyboard with correct extended keys. *Live pointer mapping exact on all monitors; key mapping unit-tested; live keystrokes into Notepad.*
+- [x] Mouse (absolute and trackpad-style), smooth wheel, keyboard with correct extended keys. *Live: pointer mapping exact on all monitors; a remote click focused a test window and Shift+A, 1, Space, B arrived as "A1 b"; key mapping unit-tested.*
 - [x] No stuck keys or buttons when the connection drops or the browser loses focus. *Integration test; client sends `release` on blur.*
-- [x] Text entry from phone keyboards, including line breaks and tabs. *Live into Notepad.*
+- [x] Text entry from phone keyboards, including line breaks and tabs. *Live: line break, tab, accented letters and an emoji arrived byte-for-byte in a test window.*
 - [ ] Controllers: Gamepad API in the browser drives a virtual Xbox 360 pad on the PC. *Implemented; mapping and driver IOCTLs unit-tested; the browser-to-host path and the "install ViGEmBus" notice were checked live with a simulated pad. Needs the ViGEmBus driver and a real controller to finish.* _(device)_
 
 ## Audio

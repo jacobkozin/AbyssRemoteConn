@@ -90,6 +90,13 @@ internal sealed class DesktopDuplication : IDisposable
     {
         Com.Release(ref _duplication);
         int hr = Dxgi.DuplicateOutput(_output1, Device, out _duplication);
+        // Seen once on the dev PC right after another capturing process was killed: Windows can
+        // briefly refuse with E_INVALIDARG or "not currently available". Retry a few times.
+        for (int attempt = 0; attempt < 4 && hr is unchecked((int)0x80070057) or HResults.DxgiNotCurrentlyAvailable; attempt++)
+        {
+            Thread.Sleep(250);
+            hr = Dxgi.DuplicateOutput(_output1, Device, out _duplication);
+        }
         if (hr is HResults.AccessDenied or HResults.DxgiSessionDisconnected)
             throw new DesktopUnavailableException("The PC is locked or showing a secure prompt (UAC). Waiting for the desktop…");
         if (hr == HResults.DxgiNotCurrentlyAvailable)
