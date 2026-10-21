@@ -15,6 +15,8 @@ if (options.SmokeTest) options = options with { Port = 0, Lan = false };
 // Per-monitor DPI awareness: capture, cursor and SetCursorPos then all use physical pixels.
 try { NativeDpi.Enable(); } catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException) { }
 
+if (options.ProbeVideo) return AbyssRemote.Host.GameMode.VideoProbe.Run(new DesktopEngine());
+
 string webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 if (!File.Exists(Path.Combine(webRoot, "index.html")))
 {

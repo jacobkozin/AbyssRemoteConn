@@ -18,6 +18,21 @@ public sealed class DesktopEngine : IDesktop
         new GdiFrameSource(this, display, maxWidth, quality);
 
     public IInputSink CreateInputSink(Action<object> notify) => new NativeInputSink(this, notify);
+
+    public IVideoSource CreateVideoSource(VideoSettings settings)
+    {
+        var display = Displays().ElementAtOrDefault(settings.Display)
+            ?? throw new GameMode.VideoUnsupportedException("That monitor is no longer connected.");
+        return new GameMode.GpuVideoSource(display, settings);
+    }
+
+    private readonly Lazy<bool> _hardwareVideo = new(() =>
+    {
+        try { return GameMode.HardwareEncoder.AnyAvailable(); }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) { return false; }
+    });
+
+    public bool HardwareVideoAvailable => _hardwareVideo.Value;
 }
 
 /// <summary>Desktop-mode capture for one viewer. The monitor is copied with BitBlt into a DIB

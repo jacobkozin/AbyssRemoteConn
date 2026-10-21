@@ -1,22 +1,27 @@
 // Abyss Remote browser client: pairing, the remote session, and mouse/touch/keyboard input.
-// Video comes from a stream module (jpeg-stream.js); input goes over one authenticated
-// WebSocket as small JSON messages (see docs/API.md). No third-party code, no outside requests.
+// Video comes from one of two stream modules with the same callbacks: jpeg-stream.js (Desktop
+// mode) or video-stream.js (Game mode, hardware H.264 + WebCodecs). Input goes over one
+// authenticated WebSocket as small JSON messages (see docs/API.md). No third-party code.
 import { startJpegStream } from './jpeg-stream.js';
+import { startVideoStream, gameModeSupported } from './video-stream.js';
 
 const $ = (id) => document.getElementById(id);
 const desktop = $('desktop');
 const canvasContext = desktop.getContext('2d', { alpha: false, desynchronized: true });
 const PROTOCOL = 'abyss-v1';
-const CLOSE_REVOKED = 4001, CLOSE_REPLACED = 4008, CLOSE_BUSY = 4029;
+const CLOSE_REVOKED = 4001, CLOSE_REPLACED = 4008, CLOSE_BUSY = 4029, CLOSE_UNSUPPORTED = 4415;
 const SETTINGS_KEY = 'abyss-remote:settings';
 
 const state = {
-  csrf: null, myId: null, active: false, stopped: false,
+  csrf: null, myId: null, active: false, stopped: false, features: {},
+  mode: 'desktop', gameAvailable: false,
   displays: [], display: 0, preferredDisplay: null,
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
   zoom: 100, frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
+  desktopWidth: 0, desktopHeight: 0,
+  cursor: { x: 0, y: 0, visible: false, hotX: 0, hotY: 0, width: 0, height: 0 },
   immersive: false, keyboardOpen: false, menuOpen: false, fitUserSet: false,
-  pressedKeys: new Set(), lastX: 0, lastY: 0,
+  pressedKeys: new Set(), lastX: 0, lastY: 0, lockedDx: 0, lockedDy: 0,
   stats: { frames: 0, bytes: 0, since: 0, idle: false },
 };
 
@@ -40,7 +45,8 @@ function loadSettings() {
 }
 function saveSettings() {
   const data = { display: state.display, mode: $('modePick').value, fps: $('fpsPick').value,
-                 fit: state.fitUserSet ? $('fitPick').value : undefined };
+                 fit: state.fitUserSet ? $('fitPick').value : undefined, streamMode: state.mode,
+                 gameHeight: $('gameHeightPick').value, gameFps: $('gameFpsPick').value, bitrate: $('bitratePick').value };
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); } catch { /* not remembered */ }
 }
 function applySettings(saved) {
@@ -50,8 +56,12 @@ function applySettings(saved) {
   };
   pick('modePick', saved.mode);
   pick('fpsPick', saved.fps);
+  pick('gameHeightPick', saved.gameHeight);
+  pick('gameFpsPick', saved.gameFps);
+  pick('bitratePick', saved.bitrate);
   if (pick('fitPick', saved.fit)) state.fitUserSet = true;
   if (Number.isInteger(saved.display)) state.preferredDisplay = saved.display;
+  if (saved.streamMode === 'game') state.mode = 'game'; // confirmed once we know the PC and browser support it
 }
 
 // ---------------------------------------------------------------- views
@@ -103,16 +113,37 @@ async function refreshIdentity() {
   const me = await api('/api/v1/me');
   state.csrf = me.csrf;
   state.myId = me.id;
+  state.features = me.features || {};
 }
 async function initialize() {
   try {
     await refreshIdentity();
     showRemote();
     await getDisplays();
+    await detectGameMode();
     connect();
   } catch (error) {
     showPair(error.status === 401 ? '' : `Could not reach the PC: ${error.message}`);
   }
+}
+
+// Game mode needs a hardware encoder on the PC and WebCodecs H.264 in this browser.
+async function detectGameMode() {
+  state.gameAvailable = state.features.gameMode === true && await gameModeSupported();
+  $('streamModeLabel').classList.toggle('hidden', !state.gameAvailable);
+  $('quickStreamModeLabel').classList.toggle('hidden', !state.gameAvailable);
+  setStreamMode(state.gameAvailable ? state.mode : 'desktop', { restart: false });
+}
+
+function setStreamMode(mode, { restart = true } = {}) {
+  state.mode = mode === 'game' && state.gameAvailable ? 'game' : 'desktop';
+  document.body.classList.toggle('game-mode', state.mode === 'game');
+  $('streamMode').value = state.mode;
+  $('quickStreamMode').value = state.mode;
+  $('quickGameHeight').value = $('gameHeightPick').value;
+  if (state.mode !== 'game') { hideCursor(); if (document.pointerLockElement) document.exitPointerLock(); }
+  saveSettings();
+  if (restart) restartVideo();
 }
 async function getDisplays() {
   const items = await api('/api/v1/displays');
@@ -173,15 +204,35 @@ function requestedWidth() {
 }
 
 function openVideo(epoch) {
-  const width = requestedWidth();
-  state.lastRequestedWidth = width;
   state.stats = { frames: 0, bytes: 0, since: performance.now(), idle: false };
-  state.stream = startJpegStream({
-    url: wsUrl(`/api/v1/stream?display=${state.display}&fps=${Number($('fpsPick').value)}&quality=85&width=${width}`),
+  const common = {
     protocols: [PROTOCOL, state.csrf],
     onFrame: (image, info) => { if (epoch === state.epoch) drawFrame(image, info); },
     onStatus: (status) => { if (epoch === state.epoch) streamStatus(status); },
-    onClose: (code) => { if (epoch === state.epoch) connectionLost('video', code); },
+    onClose: (code, reason) => { if (epoch === state.epoch) connectionLost('video', code, reason); },
+  };
+  if (state.mode === 'game') {
+    const query = `display=${state.display}&fps=${$('gameFpsPick').value}&height=${$('gameHeightPick').value}&bitrate=${$('bitratePick').value}`;
+    state.stream = startVideoStream({
+      ...common,
+      url: wsUrl(`/api/v1/video?${query}`),
+      onConfig: (config) => {
+        if (epoch !== state.epoch) return;
+        state.desktopWidth = config.desktopWidth;
+        state.desktopHeight = config.desktopHeight;
+        showError('');
+      },
+      onCursor: (cursor) => { if (epoch === state.epoch) moveCursor(cursor); },
+      onCursorImage: (image) => { if (epoch === state.epoch) setCursorImage(image); },
+      onStats: (stats) => { if (epoch === state.epoch) gameStats(stats); },
+    });
+    return;
+  }
+  const width = requestedWidth();
+  state.lastRequestedWidth = width;
+  state.stream = startJpegStream({
+    ...common,
+    url: wsUrl(`/api/v1/stream?display=${state.display}&fps=${Number($('fpsPick').value)}&quality=85&width=${width}`),
   });
 }
 
@@ -193,9 +244,18 @@ function restartVideo() {
   openVideo(state.epoch);
 }
 
-function connectionLost(which, code) {
+function connectionLost(which, code, reason = '') {
   if (!state.active || state.stopped) return;
   if (code === CLOSE_REVOKED) { showPair('This device was signed out or revoked. Pair it again with a new code.'); return; }
+  if (code === CLOSE_UNSUPPORTED && which === 'video') {
+    // The PC cannot do Game mode for this monitor: fall back to Desktop mode and say why.
+    state.gameAvailable = false;
+    $('streamModeLabel').classList.add('hidden');
+    $('quickStreamModeLabel').classList.add('hidden');
+    setStreamMode('desktop');
+    showError(`Game mode is not available: ${reason || 'no hardware video encoder'}. Using Desktop mode.`);
+    return;
+  }
   if (code === CLOSE_REPLACED) {
     if (which === 'control') {
       state.control = null;
@@ -258,11 +318,13 @@ function drawFrame(image, info) {
   }
   canvasContext.drawImage(image, 0, 0);
   hideOverlay();
-  const stats = state.stats;
-  stats.frames++;
-  stats.bytes += info.bytes || 0;
-  stats.idle = false;
-  updateStats();
+  if (state.mode !== 'game') { // Game mode gets its numbers from the host (gameStats)
+    const stats = state.stats;
+    stats.frames++;
+    stats.bytes += info.bytes || 0;
+    stats.idle = false;
+    updateStats();
+  }
   if (state.control?.readyState === WebSocket.OPEN) state.retryCount = 0;
 }
 
@@ -273,9 +335,53 @@ function streamStatus(status) {
     updateStats();
   } else if (status.type === 'unavailable') {
     showOverlay(status.message || 'The desktop is not available right now.');
+  } else if (status.type === 'resumed') {
+    hideOverlay();
   } else if (status.type === 'error') {
     showError(status.message || 'Video error.');
   }
+}
+
+// Game mode numbers come from the host: frames it sent, encode time, and how long a frame
+// takes from being sent until this browser has decoded it and its ack is back.
+function gameStats(stats) {
+  const size = `${state.frameWidth} × ${state.frameHeight}`;
+  const text = stats.fps === 0
+    ? `Screen unchanged · ${size}`
+    : `${Math.round(stats.fps)} fps · ${stats.mbps} Mbps · encode ${stats.encodeMs} ms · network+decode ${stats.deliverMs} ms · ${size}`;
+  $('streamStats').textContent = text;
+  $('quickStatus').textContent = text;
+}
+
+// ---------------------------------------------------------------- Game-mode mouse pointer
+
+function setCursorImage(image) {
+  state.cursor.hotX = image.hotX;
+  state.cursor.hotY = image.hotY;
+  state.cursor.width = image.width;
+  state.cursor.height = image.height;
+  $('remoteCursor').src = `data:image/png;base64,${image.png}`;
+  placeCursor();
+}
+function moveCursor(position) {
+  state.cursor.x = position.x;
+  state.cursor.y = position.y;
+  state.cursor.visible = position.visible;
+  placeCursor();
+}
+function hideCursor() { $('remoteCursor').classList.add('hidden'); }
+// Desktop duplication reports the pointer image's top-left corner in monitor pixels. The
+// image is drawn at least half size so it stays visible when a 4K desktop fits on a phone.
+function placeCursor() {
+  const image = $('remoteCursor'), c = state.cursor;
+  if (state.mode !== 'game' || !c.visible || !c.width || !state.desktopWidth || !image.getAttribute('src')) { hideCursor(); return; }
+  const scaleX = desktop.clientWidth / state.desktopWidth, scaleY = desktop.clientHeight / state.desktopHeight;
+  const size = Math.max(scaleX, 0.5);
+  image.style.width = `${c.width * size}px`;
+  image.style.height = `${c.height * size}px`;
+  image.style.left = `${desktop.offsetLeft + (c.x + c.hotX) * scaleX - c.hotX * size}px`;
+  image.style.top = `${desktop.offsetTop + (c.y + c.hotY) * scaleY - c.hotY * size}px`;
+  image.classList.remove('hidden');
 }
 
 function updateStats(force = false) {
@@ -320,6 +426,7 @@ function updateScreenLayout() {
   const scroller = $('screenScroller');
   scroller.scrollLeft = Math.max(0, (surfaceW - viewportW) / 2);
   scroller.scrollTop = Math.max(0, (surfaceH - viewportH) / 2);
+  placeCursor();
 }
 
 let layoutDebounce, resolutionDebounce;
@@ -400,10 +507,44 @@ function resetTouchGesture() {
   twoFingerMoved = false; twoFingerTravel = 0; twoFingerCenter = null; rightHeld = false;
   releaseDrag(); dragging = false;
 }
+// Game mode on a computer: "Lock mouse" hides the local pointer and sends raw movement, which
+// is what first-person games expect. The browser always releases the lock on Esc.
+const mouseLocked = () => document.pointerLockElement === desktop;
+let lockedMoveQueued = false;
+function queueLockedMove(event) {
+  const parts = event.getCoalescedEvents?.();
+  for (const e of parts?.length ? parts : [event]) { state.lockedDx += e.movementX; state.lockedDy += e.movementY; }
+  if (lockedMoveQueued) return;
+  lockedMoveQueued = true;
+  requestAnimationFrame(() => {
+    lockedMoveQueued = false;
+    const dx = Math.round(state.lockedDx), dy = Math.round(state.lockedDy);
+    state.lockedDx -= dx; state.lockedDy -= dy;
+    if (dx || dy) send('move', { dx, dy });
+  });
+}
+$('lockMouse').addEventListener('click', () => {
+  const request = desktop.requestPointerLock?.();
+  if (request?.catch) request.catch(() => showError('This browser did not allow locking the mouse.'));
+  else if (!desktop.requestPointerLock) showError('This browser cannot lock the mouse.');
+});
+document.addEventListener('pointerlockchange', () => {
+  const locked = mouseLocked();
+  document.body.classList.toggle('pointer-locked', locked);
+  showError(locked ? 'Mouse locked to the PC. Press Esc to release it.' : '');
+  if (!locked) releaseAllInput();
+});
+
 desktop.addEventListener('pointerdown', (event) => {
   if (!state.active) return;
   event.preventDefault();
   desktop.focus({ preventScroll: true }); // keyboard input goes to the PC while the desktop has focus
+  if (mouseLocked()) {
+    dragging = true;
+    dragButton = event.button >= 0 && event.button <= 4 ? event.button : 0;
+    send('mouse', { button: dragButton, action: 'down' });
+    return;
+  }
   try { desktop.setPointerCapture(event.pointerId); } catch { /* not capturable */ }
   if (event.pointerType === 'touch') {
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -439,6 +580,7 @@ desktop.addEventListener('pointerdown', (event) => {
 });
 desktop.addEventListener('pointermove', (event) => {
   if (!state.active) return;
+  if (mouseLocked()) { queueLockedMove(event); return; }
   if (event.pointerType === 'touch' && touches.has(event.pointerId)) {
     const previous = touches.get(event.pointerId);
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -584,6 +726,15 @@ function selectDisplay(id) {
 }
 $('displayPick').addEventListener('change', () => selectDisplay(Number($('displayPick').value)));
 $('fpsPick').addEventListener('change', () => { saveSettings(); restartVideo(); });
+$('streamMode').addEventListener('change', () => setStreamMode($('streamMode').value));
+$('quickStreamMode').addEventListener('change', () => setStreamMode($('quickStreamMode').value));
+for (const id of ['gameHeightPick', 'gameFpsPick', 'bitratePick'])
+  $(id).addEventListener('change', () => { $('quickGameHeight').value = $('gameHeightPick').value; saveSettings(); restartVideo(); });
+$('quickGameHeight').addEventListener('change', () => {
+  $('gameHeightPick').value = $('quickGameHeight').value;
+  saveSettings();
+  restartVideo();
+});
 $('refresh').addEventListener('click', async () => {
   showError('');
   try { await refreshIdentity(); await getDisplays(); state.retryCount = 0; connect(); }

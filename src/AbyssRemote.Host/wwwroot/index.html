@@ -45,16 +45,22 @@
         </div>
       </div>
       <div class="toolbar" id="settingsPanel">
+        <label id="streamModeLabel" class="hidden">MODE <select id="streamMode" title="Desktop: sharp still images. Game: 60 fps hardware video."><option value="desktop">Desktop · sharp</option><option value="game">Game · 60 fps</option></select></label>
         <label>MONITOR <select id="displayPick" title="Pick a monitor"></select></label>
         <label>FIT <select id="fitPick" title="Fit shows the entire screen; Fill crops; Stretch changes its shape"><option value="fit">Fit whole screen</option><option value="fill">Fill / crop edges</option><option value="stretch">Stretch</option></select></label>
         <label>INPUT <select id="modePick"><option value="direct">Direct touch</option><option value="trackpad">Trackpad</option></select></label>
-        <span class="clarity-chip" title="High-quality JPEG at a resolution matched to this screen">✦ HIGH CLARITY</span>
-        <label>FRAME RATE <select id="fpsPick"><option value="6">6 FPS</option><option value="12">12 FPS</option><option value="18" selected>18 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option></select></label>
+        <span class="clarity-chip desktop-only" title="High-quality JPEG at a resolution matched to this screen">✦ HIGH CLARITY</span>
+        <label class="desktop-only">FRAME RATE <select id="fpsPick"><option value="6">6 FPS</option><option value="12">12 FPS</option><option value="18" selected>18 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option></select></label>
+        <label class="game-only">RESOLUTION <select id="gameHeightPick"><option value="720">720p</option><option value="1080" selected>1080p</option><option value="1440">1440p</option><option value="2160">Native (up to 4K)</option></select></label>
+        <label class="game-only">FRAME RATE <select id="gameFpsPick"><option value="30">30 FPS</option><option value="60" selected>60 FPS</option><option value="120">120 FPS</option></select></label>
+        <label class="game-only">BITRATE <select id="bitratePick" title="Higher looks better but needs stronger Wi-Fi"><option value="10000">10 Mbps</option><option value="20000" selected>20 Mbps</option><option value="35000">35 Mbps</option><option value="50000">50 Mbps</option></select></label>
+        <button id="lockMouse" class="toolbutton game-only" type="button" title="Capture the mouse for games (press Esc to release)">🖱 Lock mouse</button>
       </div>
       <div class="desktop-stage" id="desktopStage">
         <div class="screen-scroller" id="screenScroller">
           <div id="screenSurface" class="screen-surface">
             <canvas id="desktop" width="1280" height="720" tabindex="0" aria-label="Remote desktop viewport"></canvas>
+            <img id="remoteCursor" class="remote-cursor hidden" alt="" aria-hidden="true">
           </div>
         </div>
         <div class="screen-overlay" id="screenOverlay">Connecting to your desktop…</div>
@@ -76,6 +82,8 @@
           <button type="button" id="quickScrollDown">↓ <span>Scroll down</span></button>
         </div>
         <div class="quick-options">
+          <label id="quickStreamModeLabel" class="hidden">Mode <select id="quickStreamMode" aria-label="Stream mode"><option value="desktop">Desktop · sharp</option><option value="game">Game · 60 fps</option></select></label>
+          <label class="game-only">Quality <select id="quickGameHeight" aria-label="Game resolution"><option value="720">720p</option><option value="1080">1080p</option><option value="1440">1440p</option><option value="2160">Native</option></select></label>
           <label>Screen <select id="quickFit" aria-label="Screen scaling"><option value="fit">Fit · whole desktop</option><option value="fill">Fill · edge to edge</option><option value="stretch">Stretch · distort</option></select></label>
           <label>Touch <select id="quickMode" aria-label="Touch mode"><option value="direct">Direct touch</option><option value="trackpad">Trackpad</option></select></label>
           <label class="quick-display-label">Monitor <select id="quickDisplay" aria-label="Monitor"></select></label>

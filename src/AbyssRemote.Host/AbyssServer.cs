@@ -137,7 +137,11 @@ public static class AbyssServer
             var device = Device(ctx);
             if (device is null) return Results.Unauthorized();
             c.State.UpdateSeen(device.Id);
-            return Results.Ok(new { id = device.Id, device = device.Name, csrf = c.Protection.Csrf(device.Id), version = AppInfo.Version });
+            return Results.Ok(new
+            {
+                id = device.Id, device = device.Name, csrf = c.Protection.Csrf(device.Id), version = AppInfo.Version,
+                features = new { gameMode = c.Desktop.HardwareVideoAvailable },
+            });
         });
 
         app.MapGet("/api/v1/displays", (HttpContext ctx) =>
@@ -202,6 +206,36 @@ public static class AbyssServer
             }
             using var source = c.Desktop.CreateFrameSource(display, width, quality);
             await JpegStream.RunAsync(live, source, fps, () => c.State.IsActive(device.Id), ctx.RequestAborted);
+        }));
+
+        // Game mode video: hardware H.264, paced by the browser's acks (see VideoStream).
+        app.Map("/api/v1/video", (HttpContext ctx) => RunSocketAsync(ctx, c, SocketKind.Video, async (live, device) =>
+        {
+            var settings = new VideoSettings(
+                Display: QueryInt(ctx, "display", 0, 0, 64),
+                Fps: QueryInt(ctx, "fps", 60, 10, 120),
+                BitrateKbps: QueryInt(ctx, "bitrate", 20_000, 2_000, 80_000),
+                MaxHeight: QueryInt(ctx, "height", 1080, 360, 2160));
+            if (settings.Display >= c.Desktop.Displays().Count)
+            {
+                await live.CloseAsync((int)WebSocketCloseStatus.InvalidPayloadData, "That monitor does not exist");
+                return;
+            }
+            IVideoSource source;
+            try { source = c.Desktop.CreateVideoSource(settings); }
+            catch (Exception ex) when (ex is GameMode.VideoUnsupportedException or GameMode.NativeCallException)
+            {
+                c.Notice($"Game mode is not available: {ex.Message}");
+                await live.CloseAsync(CloseCodes.Unsupported, ex.Message.Length <= 120 ? ex.Message : ex.Message[..117] + "...");
+                return;
+            }
+            catch (DesktopUnavailableException ex)
+            {
+                await live.SendJsonAsync(new { type = "unavailable", message = ex.Message }, ctx.RequestAborted);
+                await live.CloseAsync(1013 /* try again later */, "Desktop unavailable");
+                return;
+            }
+            using (source) await VideoStream.RunAsync(live, source, () => c.State.IsActive(device.Id), ctx.RequestAborted);
         }));
 
         // Mouse, keyboard and text input. Small JSON messages, see docs/API.md.

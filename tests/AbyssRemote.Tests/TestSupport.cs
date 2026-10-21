@@ -41,6 +41,19 @@ public sealed class FakeDesktop : IDesktop
         return new Sink(this);
     }
 
+    /// <summary>What Game mode creates. Default: a fake encoder that emits a frame per credit.</summary>
+    public Func<VideoSettings, IVideoSource> OnCreateVideo { get; set; } = _ => new FakeVideoSource();
+    public FakeVideoSource? LastVideo { get; private set; }
+
+    public IVideoSource CreateVideoSource(VideoSettings settings)
+    {
+        var source = OnCreateVideo(settings);
+        LastVideo = source as FakeVideoSource;
+        return source;
+    }
+
+    public bool HardwareVideoAvailable => true;
+
     private sealed class Source(FakeDesktop owner) : IFrameSource
     {
         public byte[]? Capture(bool forceFullFrame) => owner.OnCapture(forceFullFrame);
@@ -51,6 +64,52 @@ public sealed class FakeDesktop : IDesktop
     {
         public void Handle(JsonElement command) { lock (owner._commands) owner._commands.Add(command.GetRawText()); }
         public void Dispose() => Interlocked.Decrement(ref owner._sinksOpen);
+    }
+}
+
+/// <summary>A pretend hardware encoder: every credit the server grants immediately produces one
+/// frame (as if the screen were always changing), so tests can observe the flow control.</summary>
+public sealed class FakeVideoSource : IVideoSource
+{
+    private readonly System.Threading.Channels.Channel<VideoEvent> _events = System.Threading.Channels.Channel.CreateUnbounded<VideoEvent>();
+    private readonly object _sync = new();
+    private bool _configSent, _keyframeNext = true;
+    private long _frames;
+
+    public long FramesProduced { get { lock (_sync) return _frames; } }
+    public int KeyframeRequests { get; private set; }
+    public bool Disposed { get; private set; }
+
+    public System.Threading.Channels.ChannelReader<VideoEvent> Events => _events.Reader;
+
+    public void AllowFrames(int count)
+    {
+        lock (_sync)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                if (!_configSent)
+                {
+                    _events.Writer.TryWrite(new VideoConfig("avc1.64002a", [1, 0x64, 0, 0x2A], 1280, 720, 1920, 1080, "Fake encoder"));
+                    _configSent = true;
+                }
+                bool key = _keyframeNext;
+                _keyframeNext = false;
+                _frames++;
+                _events.Writer.TryWrite(new EncodedVideoFrame(_frames, key, (uint)(_frames * 16), [0, 0, 0, 1, key ? (byte)0x65 : (byte)0x41, 0xAA], 1.5));
+            }
+        }
+    }
+
+    public void RequestKeyframe()
+    {
+        lock (_sync) { KeyframeRequests++; _keyframeNext = true; }
+    }
+
+    public void Dispose()
+    {
+        Disposed = true;
+        _events.Writer.TryComplete();
     }
 }
 

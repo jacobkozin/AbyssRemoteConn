@@ -18,6 +18,7 @@ public static class JpegStream
 
     public static async Task RunAsync(LiveSocket live, IFrameSource source, int fps, Func<bool> stillPaired, CancellationToken aborted)
     {
+        using var timer = TimerResolution.OneMillisecond();
         var request = new byte[16];
         var interval = TimeSpan.FromSeconds(1.0 / fps);
         var clock = Stopwatch.StartNew();
