@@ -516,14 +516,16 @@ function scheduleResolutionRefresh() {
     if (Math.abs(requestedWidth() - state.lastRequestedWidth) > 240) restartVideo();
   }, 480);
 }
-window.addEventListener('resize', () => {
+// Re-fit the picture whenever the stage changes size for any reason: rotation, window
+// resizing, full screen, the settings panel opening, or the phone keyboard appearing.
+new ResizeObserver(() => {
   clearTimeout(layoutDebounce);
   layoutDebounce = setTimeout(() => {
     if (state.immersive && !state.fitUserSet) { $('fitPick').value = 'fit'; syncQuickControls(); }
     updateScreenLayout();
     scheduleResolutionRefresh();
   }, 80);
-});
+}).observe($('desktopStage'));
 
 // ---------------------------------------------------------------- input
 
@@ -845,7 +847,32 @@ function setImmersive(enabled) {
   syncQuickControls();
   $('immersive').setAttribute('aria-pressed', String(enabled));
   $('immersive').querySelector('span').textContent = enabled ? 'Exit full screen' : 'Full screen';
+  setBrowserFullscreen(enabled);
   requestAnimationFrame(() => { updateScreenLayout(); scheduleResolutionRefresh(); });
+}
+
+// Real full screen where the browser allows it (iPad, computers). iPhone Safari only allows it
+// for videos, so there the CSS layout above (or the Home Screen app) is what users get. In
+// Chromium browsers, Keyboard Lock then sends Esc, Alt+Tab and the Windows key to the PC
+// (hold Esc to leave full screen).
+function setBrowserFullscreen(enabled) {
+  const root = document.documentElement;
+  const current = document.fullscreenElement || document.webkitFullscreenElement;
+  try {
+    if (enabled && !current) {
+      const request = root.requestFullscreen?.({ navigationUI: 'hide' }) ?? root.webkitRequestFullscreen?.();
+      Promise.resolve(request).then(() => navigator.keyboard?.lock?.()).catch(() => { /* not allowed here: CSS full screen still applies */ });
+    } else if (!enabled && current) {
+      navigator.keyboard?.unlock?.();
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    }
+  } catch { /* unsupported */ }
+}
+for (const event of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(event, () => {
+    // Leaving full screen with the browser's own controls also leaves the immersive layout.
+    if (!(document.fullscreenElement || document.webkitFullscreenElement) && state.immersive && !window.matchMedia('(pointer: coarse)').matches) setImmersive(false);
+  });
 }
 function syncQuickControls() {
   $('quickFit').value = $('fitPick').value;
