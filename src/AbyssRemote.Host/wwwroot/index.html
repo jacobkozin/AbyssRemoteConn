@@ -6,10 +6,11 @@
   <meta name="theme-color" content="#070e19">
   <meta name="apple-mobile-web-app-title" content="Abyss Remote">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Abyss Remote</title>
-  <link rel="stylesheet" href="/style.css?v=0.3.3">
-  <script src="/app.js?v=0.3.3" defer></script>
+  <link rel="stylesheet" href="/style.css?v=1.0.0">
+  <script type="module" src="/app.js?v=1.0.0"></script>
 </head>
 <body>
   <header class="bar" id="siteHeader">
@@ -22,7 +23,7 @@
         <div class="hero-icon">⌘</div>
         <div class="eyebrow">PRIVATE REMOTE ACCESS</div>
         <h1>Your desktop.<br><span>Anywhere on your network.</span></h1>
-        <p>Pair this device with the eight-digit, one-time code displayed in the Abyss Remote Windows host console. Press <kbd>P</kbd> for a new code.</p>
+        <p>Pair this device with the eight-digit, one-time code shown in the Abyss Remote window on your PC. Press <kbd>P</kbd> there for a new code.</p>
         <form id="pairForm">
           <label for="deviceName">THIS DEVICE</label>
           <input id="deviceName" value="My iPhone / iPad" maxlength="60" required autocomplete="off">
@@ -31,7 +32,7 @@
           <button class="primary" type="submit">Connect this device <span aria-hidden="true">→</span></button>
         </form>
         <div id="pairError" class="error" role="alert"></div>
-        <p class="footnote">Only pair devices you control. Do not share your PIN or expose port 8443 to the internet.</p>
+        <p class="footnote">Only pair devices you control. Never share the code or expose this PC to the internet.</p>
       </div>
     </section>
     <section id="remoteView" class="remote hidden" aria-label="Remote session">
@@ -45,31 +46,21 @@
       </div>
       <div class="toolbar" id="settingsPanel">
         <label>MONITOR <select id="displayPick" title="Pick a monitor"></select></label>
-        <label>FIT <select id="fitPick" title="Fit preserves the entire screen; Fill crops; Stretch changes its shape"><option value="fit">Fit whole screen</option><option value="fill">Fill / crop edges</option><option value="stretch">Stretch</option></select></label>
+        <label>FIT <select id="fitPick" title="Fit shows the entire screen; Fill crops; Stretch changes its shape"><option value="fit">Fit whole screen</option><option value="fill">Fill / crop edges</option><option value="stretch">Stretch</option></select></label>
         <label>INPUT <select id="modePick"><option value="direct">Direct touch</option><option value="trackpad">Trackpad</option></select></label>
-        <span class="clarity-chip" title="High-quality JPEG at display-aware resolution; the blurry low-quality presets have been removed">✦ HIGH CLARITY</span>
-        <label>FRAME RATE <select id="fpsPick"><option value="6">6 FPS</option><option value="12">12 FPS</option><option value="18" selected>18 FPS</option><option value="24">24 FPS</option></select></label>
+        <span class="clarity-chip" title="High-quality JPEG at a resolution matched to this screen">✦ HIGH CLARITY</span>
+        <label>FRAME RATE <select id="fpsPick"><option value="6">6 FPS</option><option value="12">12 FPS</option><option value="18" selected>18 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option></select></label>
       </div>
       <div class="desktop-stage" id="desktopStage">
         <div class="screen-scroller" id="screenScroller">
           <div id="screenSurface" class="screen-surface">
-            <canvas id="desktop" width="1280" height="720" aria-label="Remote desktop viewport"></canvas>
+            <canvas id="desktop" width="1280" height="720" tabindex="0" aria-label="Remote desktop viewport"></canvas>
           </div>
         </div>
         <div class="screen-overlay" id="screenOverlay">Connecting to your desktop…</div>
-        <div class="screen-corner" id="screenCorner">REMOTE</div>
       </div>
-      <div class="immersive-chrome immersive-top" aria-hidden="true"><span class="frame-glyph">✦</span><span class="frame-label">ABYSS <b>REMOTE</b> <small>◦ PRIVATE SESSION</small></span><span class="frame-lines"></span></div>
-      <button id="leaveImmersive" class="exit-immersive hidden" aria-label="Exit full screen">✕ Exit</button>
-      <div class="immersive-chrome immersive-dock" aria-label="Immersive controls">
-        <span class="dock-pip" aria-hidden="true"></span>
-        <button id="immersiveKeyboard" class="dock-keyboard" aria-controls="keyboardSheet" aria-expanded="false">⌨ &nbsp;Keyboard</button>
-        <button id="immersiveRight" aria-label="Right click">◌ Right</button>
-        <button id="immersiveScrollUp" aria-label="Scroll up">↑</button>
-        <button id="immersiveScrollDown" aria-label="Scroll down">↓</button>
-      </div>
-      <!-- R3.2: Desktop first. The video fills the available viewport; this small handle
-           is the only always-visible control. The sheet is collapsed while working. -->
+      <!-- Phones: the desktop fills the screen and this floating button is the only
+           always-visible control. -->
       <button id="quickToggle" class="quick-toggle" type="button" aria-controls="quickPanel" aria-expanded="false" aria-label="Open remote controls">
         <span class="quick-toggle-icon" aria-hidden="true">✦</span><span class="quick-toggle-label">Controls</span>
       </button>
@@ -80,7 +71,7 @@
         </div>
         <div class="quick-primary">
           <button type="button" id="quickKeyboard" class="quick-accent">⌨ <span>Keyboard</span></button>
-          <button type="button" id="quickRight" title="Optional right-click button">◌ <span>Right click</span></button>
+          <button type="button" id="quickRight" title="Right-click at the pointer">◌ <span>Right click</span></button>
           <button type="button" id="quickScrollUp">↑ <span>Scroll up</span></button>
           <button type="button" id="quickScrollDown">↓ <span>Scroll down</span></button>
         </div>
@@ -93,10 +84,10 @@
           <button id="quickReconnect" type="button">↻ Reconnect</button>
           <button id="quickExit" type="button">Exit screen mode</button>
         </div>
-        <p class="quick-help">Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag; swipe with two fingers to scroll. Fit shows your whole screen; Fill intentionally crops its edges.</p>
+        <p class="quick-help">Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag; swipe with two fingers to scroll. Fit shows your whole screen; Fill crops its edges.</p>
       </aside>
       <div class="controlbar" id="controlBar" aria-label="Remote controls">
-        <button id="showKeyboard" class="keyboard-trigger" title="Open the iPhone keyboard" aria-controls="keyboardSheet" aria-expanded="false">⌨ <span>Keyboard</span></button>
+        <button id="showKeyboard" class="keyboard-trigger" title="Open the on-screen keyboard" aria-controls="keyboardSheet" aria-expanded="false">⌨ <span>Keyboard</span></button>
         <button id="mouseLeft" title="Left click">◉ <span>Click</span></button>
         <button id="mouseRight" title="Right click">◌ <span>Right</span></button>
         <button id="scrollUp" title="Scroll up">↑ <span>Scroll</span></button>
@@ -117,6 +108,10 @@
           <button id="keyboardEnter" title="Send Enter">Enter ↵</button>
           <button id="keyboardSend" class="primary" title="Type this text into the active PC window">Send text →</button>
         </div>
+        <div class="keyboard-actions keyboard-clipboard">
+          <button id="keyboardClipGet" title="Put the PC's clipboard text into the box above">Get PC clipboard</button>
+          <button id="keyboardClipSet" title="Copy the box above to the PC's clipboard">Copy to PC clipboard</button>
+        </div>
         <div id="keyboardStatus" class="keyboard-status" role="status" aria-live="polite"></div>
       </section>
       <div class="lowerbar" id="extraTools">
@@ -124,10 +119,10 @@
         <div class="zoomline"><label for="zoom">ZOOM</label><input id="zoom" type="range" min="100" max="250" step="10" value="100"><span id="zoomValue">100%</span><button id="copyPc" class="ghost">Read clipboard</button><button id="pushClipboard" class="ghost">Copy text to PC</button><button id="devicesButton" class="ghost">Devices</button></div>
       </div>
       <div id="remoteError" class="error" role="status"></div>
-      <p class="hint">On mobile the desktop takes over your screen. Tap the floating Controls handle for keyboard, monitors, touch mode, and Fit/Fill. iOS system edge gestures remain under Apple’s control.</p>
-      <div id="devicesPanel" class="devices-panel hidden"><h2>Paired devices</h2><div id="devicesList"></div><p>Revoking a device immediately prevents new access. A current connection will be disconnected.</p></div>
+      <p class="hint">On phones the desktop takes over the screen; tap the floating Controls button for the keyboard, monitors, touch mode and Fit/Fill. iOS edge gestures stay under Apple’s control.</p>
+      <div id="devicesPanel" class="devices-panel hidden"><h2>Paired devices</h2><div id="devicesList"></div><p>Revoking a device disconnects it immediately. Pairings expire after 30 days.</p></div>
     </section>
   </main>
-  <footer>ABYSS REMOTE <span>R3.3 · 0.3.3</span><span class="divider-dot">•</span> SELF-HOSTED BY DESIGN</footer>
+  <footer>ABYSS REMOTE <span>1.0.0</span><span class="divider-dot">•</span> SELF-HOSTED BY DESIGN</footer>
 </body>
 </html>

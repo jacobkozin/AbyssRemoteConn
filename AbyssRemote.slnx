@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AbyssRemote.Host/AbyssRemote.Host.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AbyssRemote.Tests/AbyssRemote.Tests.csproj" />
+  </Folder>
+</Solution>

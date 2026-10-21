@@ -3,9 +3,15 @@ using System.Windows.Forms;
 
 namespace AbyssRemote.Host;
 
+public sealed class WindowsClipboard : IClipboard
+{
+    public string Read() => DesktopClipboard.Read();
+    public void Write(string text) => DesktopClipboard.Write(text);
+}
+
 public static class DesktopClipboard
 {
-    // WinForms Clipboard requires STA. Limit each operation; only text is supported in R1.
+    // WinForms Clipboard requires STA. Limit each operation; only text is supported.
     public static string Read() => OnSta(() =>
     {
         if (!Clipboard.ContainsText(TextDataFormat.UnicodeText)) return "";

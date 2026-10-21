@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
@@ -6,86 +7,37 @@ using System.Windows.Forms;
 
 namespace AbyssRemote.Host;
 
-public record DisplayInfo(int Id, string Name, int X, int Y, int Width, int Height, bool Primary);
-
-public sealed class DesktopEngine
+/// <summary>The real Windows desktop: GDI capture, SendInput and the clipboard.</summary>
+public sealed class DesktopEngine : IDesktop
 {
-    public IReadOnlyList<DisplayInfo> Displays()
-    {
-        return Screen.AllScreens.Select((s, i) => new DisplayInfo(
+    public IReadOnlyList<DisplayInfo> Displays() =>
+        Screen.AllScreens.Select((s, i) => new DisplayInfo(
             i, s.DeviceName, s.Bounds.Left, s.Bounds.Top, s.Bounds.Width, s.Bounds.Height, s.Primary)).ToArray();
-    }
 
-    // A WebSocket stream owns one session. Reusing its bitmap/graphics buffers avoids
-    // allocating a full monitor-sized Bitmap twice for every frame.
-    public DesktopCaptureSession CreateCaptureSession(int display, int maxWidth, int quality) =>
-        new(this, display, maxWidth, quality);
+    public IFrameSource CreateFrameSource(int display, int maxWidth, int quality) =>
+        new GdiFrameSource(this, display, maxWidth, quality);
 
-    public void Handle(JsonElement command)
-    {
-        if (command.ValueKind != JsonValueKind.Object || !command.TryGetProperty("kind", out var type) || type.ValueKind != JsonValueKind.String)
-            return;
-        switch (type.GetString())
-        {
-            case "pointer":
-            {
-                int display = Int(command, "display", 0, 64);
-                var d = Displays().ElementAtOrDefault(display);
-                if (d is null) return;
-                double x = Double(command, "x", 0, 1), y = Double(command, "y", 0, 1);
-                NativeInput.SetCursorPos(d.X + Math.Clamp((int)(x * d.Width), 0, d.Width - 1),
-                                         d.Y + Math.Clamp((int)(y * d.Height), 0, d.Height - 1));
-                break;
-            }
-            case "move":
-                NativeInput.MoveRelative(Int(command, "dx", -400, 400), Int(command, "dy", -400, 400));
-                break;
-            case "mouse":
-                NativeInput.Mouse(Int(command, "button", 0, 2), String(command, "action") == "down");
-                break;
-            case "wheel":
-                NativeInput.Wheel(Int(command, "delta", -1200, 1200));
-                break;
-            case "key":
-                NativeInput.Key(String(command, "code"), String(command, "action") == "down");
-                break;
-            case "text":
-            {
-                var text = String(command, "text");
-                if (text.Length <= 2048) NativeInput.TypeText(text);
-                break;
-            }
-        }
-    }
-
-    private static int Int(JsonElement obj, string name, int min, int max)
-    {
-        if (!obj.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number || !n.TryGetInt32(out int i)) return min;
-        return Math.Clamp(i, min, max);
-    }
-    private static double Double(JsonElement obj, string name, double min, double max)
-    {
-        if (!obj.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number || !n.TryGetDouble(out double val) || !double.IsFinite(val)) return min;
-        return Math.Clamp(val, min, max);
-    }
-    private static string String(JsonElement obj, string name) =>
-        obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+    public IInputSink CreateInputSink(Action<object> notify) => new NativeInputSink(this, notify);
 }
 
-/// <summary>Reusable per-viewer capture buffers. GDI capture/JPEG is still CPU-bound,
-/// but stable allocations plus client-driven pacing reduce stutter and old-frame lag.</summary>
-public sealed class DesktopCaptureSession : IDisposable
+/// <summary>Desktop-mode capture for one viewer. The monitor is copied with BitBlt into a DIB
+/// section that is reused every frame; GDI draws the mouse cursor straight into it, and the
+/// raw pixels are compared with the previous frame so an unchanged screen costs no JPEG
+/// encoding and no network traffic. Still CPU-bound: see Game mode for the GPU path.</summary>
+public sealed unsafe class GdiFrameSource : IFrameSource
 {
     private readonly DesktopEngine _desktop;
     private readonly int _display, _maxWidth;
     private readonly ImageCodecInfo _jpegEncoder;
     private readonly EncoderParameters _parameters;
-    private readonly MemoryStream _buffer = new(256 * 1024);
+    private readonly MemoryStream _jpeg = new(256 * 1024);
+    private IntPtr _memoryDc, _dib, _previousObject, _bits;
     private Bitmap? _full, _scaled;
-    private Graphics? _captureGraphics, _resizeGraphics;
-    private int _lastWidth, _lastHeight, _outputWidth, _outputHeight;
+    private Graphics? _resizeGraphics;
+    private byte[] _previous = [];
+    private int _width, _height;
 
-    internal DesktopCaptureSession(DesktopEngine desktop, int display, int maxWidth, int quality)
+    internal GdiFrameSource(DesktopEngine desktop, int display, int maxWidth, int quality)
     {
         _desktop = desktop;
         _display = display;
@@ -95,49 +47,250 @@ public sealed class DesktopCaptureSession : IDisposable
         _parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)Math.Clamp(quality, 30, 90));
     }
 
-    public byte[] Capture()
+    public byte[]? Capture(bool forceFullFrame)
     {
-        var d = _desktop.Displays().ElementAtOrDefault(_display) ?? throw new ArgumentOutOfRangeException(nameof(_display));
-        if (_full is null || _lastWidth != d.Width || _lastHeight != d.Height)
+        var d = _desktop.Displays().ElementAtOrDefault(_display)
+            ?? throw new DesktopUnavailableException("That monitor is no longer connected. Pick another one.");
+        EnsureBuffers(d.Width, d.Height);
+
+        IntPtr screen = Gdi.GetDC(IntPtr.Zero);
+        try
         {
-            _resizeGraphics?.Dispose(); _captureGraphics?.Dispose();
-            _scaled?.Dispose(); _full?.Dispose();
-            _lastWidth = d.Width; _lastHeight = d.Height;
-            _outputWidth = Math.Max(1, Math.Min(_maxWidth, d.Width));
-            _outputHeight = Math.Max(1, (int)Math.Round(d.Height * (_outputWidth / (double)d.Width)));
-            _full = new Bitmap(d.Width, d.Height, PixelFormat.Format24bppRgb);
-            _captureGraphics = Graphics.FromImage(_full);
-            if (_outputWidth != d.Width || _outputHeight != d.Height)
-            {
-                _scaled = new Bitmap(_outputWidth, _outputHeight, PixelFormat.Format24bppRgb);
-                _resizeGraphics = Graphics.FromImage(_scaled);
-                _resizeGraphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
-                _resizeGraphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
-            }
-            else { _scaled = null; _resizeGraphics = null; }
+            // Fails while Windows shows the lock screen or a UAC prompt (the "secure desktop").
+            if (!Gdi.BitBlt(_memoryDc, 0, 0, _width, _height, screen, d.X, d.Y, Gdi.SrcCopy))
+                throw new DesktopUnavailableException("The PC is locked or showing a secure prompt (UAC). Waiting for the desktop…");
         }
-        _captureGraphics!.CopyFromScreen(d.X, d.Y, 0, 0, new Size(d.Width, d.Height), CopyPixelOperation.SourceCopy);
-        if (_resizeGraphics is not null)
-            _resizeGraphics.DrawImage(_full!, 0, 0, _outputWidth, _outputHeight);
-        _buffer.Position = 0; _buffer.SetLength(0);
-        (_scaled ?? _full)!.Save(_buffer, _jpegEncoder, _parameters);
-        return _buffer.ToArray();
+        finally { Gdi.ReleaseDC(IntPtr.Zero, screen); }
+        CursorPainter.Draw(_memoryDc, d.X, d.Y, _width, _height);
+        Gdi.GdiFlush();
+
+        var pixels = new ReadOnlySpan<byte>((void*)_bits, _width * _height * 4);
+        if (!forceFullFrame && pixels.SequenceEqual(_previous)) return null;
+        pixels.CopyTo(_previous);
+
+        if (_resizeGraphics is not null) _resizeGraphics.DrawImage(_full!, 0, 0, _scaled!.Width, _scaled.Height);
+        _jpeg.Position = 0;
+        _jpeg.SetLength(0);
+        (_scaled ?? _full)!.Save(_jpeg, _jpegEncoder, _parameters);
+        return _jpeg.ToArray();
+    }
+
+    private void EnsureBuffers(int width, int height)
+    {
+        if (_full is not null && width == _width && height == _height) return;
+        ReleaseBuffers();
+        _width = width;
+        _height = height;
+        var header = new Gdi.BITMAPINFOHEADER
+        {
+            biSize = Marshal.SizeOf<Gdi.BITMAPINFOHEADER>(), biWidth = width, biHeight = -height, // negative = top-down rows
+            biPlanes = 1, biBitCount = 32,
+        };
+        _memoryDc = Gdi.CreateCompatibleDC(IntPtr.Zero);
+        _dib = Gdi.CreateDIBSection(_memoryDc, ref header, 0, out _bits, IntPtr.Zero, 0);
+        if (_dib == IntPtr.Zero) throw new DesktopUnavailableException("Windows could not allocate a capture buffer.");
+        _previousObject = Gdi.SelectObject(_memoryDc, _dib);
+        _full = new Bitmap(width, height, width * 4, PixelFormat.Format32bppRgb, _bits); // a view of the DIB, no copy
+        _previous = new byte[width * height * 4];
+
+        int outputWidth = Math.Max(1, Math.Min(_maxWidth, width));
+        if (outputWidth < width)
+        {
+            int outputHeight = Math.Max(1, (int)Math.Round(height * (outputWidth / (double)width)));
+            _scaled = new Bitmap(outputWidth, outputHeight, PixelFormat.Format24bppRgb);
+            _resizeGraphics = Graphics.FromImage(_scaled);
+            _resizeGraphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+            _resizeGraphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+            _resizeGraphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
+            _resizeGraphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighSpeed;
+        }
+    }
+
+    private void ReleaseBuffers()
+    {
+        _resizeGraphics?.Dispose(); _resizeGraphics = null;
+        _scaled?.Dispose(); _scaled = null;
+        _full?.Dispose(); _full = null;
+        if (_memoryDc != IntPtr.Zero)
+        {
+            Gdi.SelectObject(_memoryDc, _previousObject);
+            Gdi.DeleteObject(_dib);
+            Gdi.DeleteDC(_memoryDc);
+            _memoryDc = _dib = _bits = IntPtr.Zero;
+        }
     }
 
     public void Dispose()
     {
-        _resizeGraphics?.Dispose(); _captureGraphics?.Dispose();
-        _scaled?.Dispose(); _full?.Dispose(); _parameters.Dispose(); _buffer.Dispose();
+        ReleaseBuffers();
+        _parameters.Dispose();
+        _jpeg.Dispose();
     }
+}
+
+/// <summary>Draws the current mouse cursor into a capture. BitBlt never includes the cursor,
+/// and without it trackpad-style control is blind. DrawIconEx also renders the "inverting"
+/// text cursor correctly because it draws onto the real captured pixels.</summary>
+internal static class CursorPainter
+{
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct CURSORINFO { public int cbSize, flags; public IntPtr hCursor; public POINT ptScreenPos; }
+    [StructLayout(LayoutKind.Sequential)] private struct ICONINFO { public int fIcon, xHotspot, yHotspot; public IntPtr hbmMask, hbmColor; }
+
+    [DllImport("user32.dll")] private static extern bool GetCursorInfo(ref CURSORINFO info);
+    [DllImport("user32.dll")] private static extern bool GetIconInfo(IntPtr icon, out ICONINFO info);
+    [DllImport("user32.dll")] private static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr icon, int cx, int cy, int step, IntPtr brush, int flags);
+
+    private const int CursorShowing = 0x1, DiNormal = 0x3;
+    private static readonly ConcurrentDictionary<IntPtr, (int X, int Y)> Hotspots = new();
+
+    public static void Draw(IntPtr hdc, int originX, int originY, int width, int height)
+    {
+        var info = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+        if (!GetCursorInfo(ref info) || (info.flags & CursorShowing) == 0 || info.hCursor == IntPtr.Zero) return;
+        int x = info.ptScreenPos.X - originX, y = info.ptScreenPos.Y - originY;
+        if (x < -64 || y < -64 || x > width + 64 || y > height + 64) return; // cursor is on another monitor
+        var hotspot = Hotspots.GetOrAdd(info.hCursor, Hotspot);
+        DrawIconEx(hdc, x - hotspot.X, y - hotspot.Y, info.hCursor, 0, 0, 0, IntPtr.Zero, DiNormal);
+    }
+
+    private static (int X, int Y) Hotspot(IntPtr cursor)
+    {
+        if (!GetIconInfo(cursor, out var icon)) return (0, 0);
+        if (icon.hbmMask != IntPtr.Zero) Gdi.DeleteObject(icon.hbmMask);
+        if (icon.hbmColor != IntPtr.Zero) Gdi.DeleteObject(icon.hbmColor);
+        return (icon.xHotspot, icon.yHotspot);
+    }
+}
+
+internal static class Gdi
+{
+    public const int SrcCopy = 0x00CC0020;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BITMAPINFOHEADER
+    {
+        public int biSize, biWidth, biHeight;
+        public short biPlanes, biBitCount;
+        public int biCompression, biSizeImage, biXPelsPerMeter, biYPelsPerMeter, biClrUsed, biClrImportant;
+    }
+
+    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr window);
+    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr window, IntPtr dc);
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateDIBSection(IntPtr dc, ref BITMAPINFOHEADER header, uint usage, out IntPtr bits, IntPtr section, uint offset);
+    [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+    [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr obj);
+    [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] public static extern bool BitBlt(IntPtr dest, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int rop);
+    [DllImport("gdi32.dll")] public static extern bool GdiFlush();
+}
+
+/// <summary>Input for one control connection. It remembers which keys and mouse buttons it
+/// pressed so a dropped connection or a lost browser focus can never leave Ctrl, Alt, Shift,
+/// Windows or a mouse button stuck down on the PC.</summary>
+public sealed class NativeInputSink : IInputSink
+{
+    private readonly DesktopEngine _desktop;
+    private readonly Action<object> _notify;
+    private readonly HashSet<string> _keysDown = new(StringComparer.Ordinal);
+    private readonly HashSet<int> _buttonsDown = new();
+
+    internal NativeInputSink(DesktopEngine desktop, Action<object> notify)
+    {
+        _desktop = desktop;
+        _notify = notify;
+    }
+
+    public void Handle(JsonElement command)
+    {
+        switch (InputCommand.Kind(command))
+        {
+            case "pointer":
+            {
+                var d = _desktop.Displays().ElementAtOrDefault(InputCommand.Int(command, "display", 0, 64));
+                if (d is null) return;
+                double x = InputCommand.Double(command, "x", 0, 1), y = InputCommand.Double(command, "y", 0, 1);
+                NativeInput.SetCursorPos(d.X + Math.Clamp((int)(x * d.Width), 0, d.Width - 1),
+                                         d.Y + Math.Clamp((int)(y * d.Height), 0, d.Height - 1));
+                break;
+            }
+            case "move":
+                NativeInput.MoveRelative(InputCommand.Int(command, "dx", -4000, 4000), InputCommand.Int(command, "dy", -4000, 4000));
+                break;
+            case "mouse":
+            {
+                int button = InputCommand.Int(command, "button", 0, 4);
+                bool down = InputCommand.String(command, "action") == "down";
+                NativeInput.Mouse(button, down);
+                if (down) _buttonsDown.Add(button); else _buttonsDown.Remove(button);
+                break;
+            }
+            case "wheel":
+                NativeInput.Wheel(InputCommand.Int(command, "delta", -1200, 1200), horizontal: false);
+                break;
+            case "hwheel":
+                NativeInput.Wheel(InputCommand.Int(command, "delta", -1200, 1200), horizontal: true);
+                break;
+            case "key":
+            {
+                string code = InputCommand.String(command, "code");
+                bool down = InputCommand.String(command, "action") == "down";
+                if (!NativeInput.Key(code, down)) return;
+                if (down) _keysDown.Add(code); else _keysDown.Remove(code);
+                break;
+            }
+            case "text":
+            {
+                string text = InputCommand.String(command, "text");
+                if (text.Length <= 2048) NativeInput.TypeText(text);
+                break;
+            }
+            case "release":
+                ReleaseAll();
+                break;
+        }
+    }
+
+    private void ReleaseAll()
+    {
+        foreach (int button in _buttonsDown) NativeInput.Mouse(button, false);
+        foreach (string code in _keysDown) NativeInput.Key(code, false);
+        _buttonsDown.Clear();
+        _keysDown.Clear();
+    }
+
+    public void Dispose() => ReleaseAll();
+}
+
+/// <summary>Reads fields from untrusted control messages, always clamped to a safe range.</summary>
+public static class InputCommand
+{
+    public static string Kind(JsonElement command) =>
+        command.ValueKind == JsonValueKind.Object ? String(command, "kind") : "";
+
+    public static int Int(JsonElement obj, string name, int min, int max)
+    {
+        if (!obj.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number || !n.TryGetDouble(out double value) || !double.IsFinite(value)) return Math.Clamp(0, min, max);
+        return (int)Math.Clamp(Math.Round(value), min, max);
+    }
+
+    public static double Double(JsonElement obj, string name, double min, double max)
+    {
+        if (!obj.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number || !n.TryGetDouble(out double value) || !double.IsFinite(value)) return min;
+        return Math.Clamp(value, min, max);
+    }
+
+    public static string String(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
 }
 
 internal static class NativeInput
 {
     private const uint InputMouse = 0, InputKeyboard = 1;
-    private const uint MouseMove = 0x0001, MouseLeftDown = 0x0002, MouseLeftUp = 0x0004,
-        MouseRightDown = 0x0008, MouseRightUp = 0x0010, MouseMiddleDown = 0x0020, MouseMiddleUp = 0x0040,
-        MouseWheel = 0x0800;
-    private const uint KeyUp = 0x0002, Unicode = 0x0004, Scancode = 0x0008;
+    private const uint MouseMove = 0x0001, LeftDown = 0x0002, LeftUp = 0x0004, RightDown = 0x0008, RightUp = 0x0010,
+        MiddleDown = 0x0020, MiddleUp = 0x0040, XDown = 0x0080, XUp = 0x0100, WheelFlag = 0x0800, HWheelFlag = 0x1000;
+    private const uint ExtendedKey = 0x0001, KeyUp = 0x0002, Unicode = 0x0004, ScanCode = 0x0008;
 
     [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint type; public Payload data; }
     [StructLayout(LayoutKind.Explicit)] private struct Payload
@@ -145,73 +298,72 @@ internal static class NativeInput
         [FieldOffset(0)] public MOUSEINPUT mouse;
         [FieldOffset(0)] public KEYBDINPUT key;
     }
-    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT
-    {
-        public int dx, dy;
-        public uint mouseData, dwFlags, time;
-        public UIntPtr extraInfo;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT
-    {
-        public ushort virtualKey, scanCode;
-        public uint flags, time;
-        public UIntPtr extraInfo;
-    }
+    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public UIntPtr extraInfo; }
+    [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort virtualKey, scanCode; public uint flags, time; public UIntPtr extraInfo; }
+
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
 
-    private static void Send(params INPUT[] inputs) { if (inputs.Length > 0) SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>()); }
-    public static void MoveRelative(int dx, int dy) => Send(new INPUT { type = InputMouse, data = new Payload { mouse = new MOUSEINPUT { dx = dx, dy = dy, dwFlags = MouseMove } } });
+    private static void Send(params INPUT[] inputs)
+    {
+        if (inputs.Length > 0) SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    private static INPUT MouseInput(uint flags, int dx = 0, int dy = 0, uint data = 0) =>
+        new() { type = InputMouse, data = new Payload { mouse = new MOUSEINPUT { dx = dx, dy = dy, mouseData = data, dwFlags = flags } } };
+
+    private static INPUT KeyInput(ushort virtualKey, ushort scanCode, uint flags) =>
+        new() { type = InputKeyboard, data = new Payload { key = new KEYBDINPUT { virtualKey = virtualKey, scanCode = scanCode, flags = flags } } };
+
+    public static void MoveRelative(int dx, int dy) => Send(MouseInput(MouseMove, dx, dy));
+
+    /// <summary>Buttons follow the browser numbering: 0 left, 1 middle, 2 right, 3 back, 4 forward.</summary>
     public static void Mouse(int button, bool pressed)
     {
-        uint flags = button switch
+        var input = button switch
         {
-            0 => pressed ? MouseLeftDown : MouseLeftUp,
-            1 => pressed ? MouseMiddleDown : MouseMiddleUp,
-            2 => pressed ? MouseRightDown : MouseRightUp,
-            _ => 0
+            0 => MouseInput(pressed ? LeftDown : LeftUp),
+            1 => MouseInput(pressed ? MiddleDown : MiddleUp),
+            2 => MouseInput(pressed ? RightDown : RightUp),
+            3 => MouseInput(pressed ? XDown : XUp, data: 1), // XBUTTON1
+            4 => MouseInput(pressed ? XDown : XUp, data: 2), // XBUTTON2
+            _ => (INPUT?)null,
         };
-        if (flags != 0) Send(new INPUT { type = InputMouse, data = new Payload { mouse = new MOUSEINPUT { dwFlags = flags } } });
-    }
-    public static void Wheel(int delta) => Send(new INPUT { type = InputMouse, data = new Payload { mouse = new MOUSEINPUT { mouseData = unchecked((uint)delta), dwFlags = MouseWheel } } });
-
-    private static readonly Dictionary<string, ushort> Special = new(StringComparer.Ordinal)
-    {
-        ["Backspace"] = 0x08, ["Tab"] = 0x09, ["Enter"] = 0x0D, ["ShiftLeft"] = 0xA0,
-        ["ShiftRight"] = 0xA1, ["ControlLeft"] = 0xA2, ["ControlRight"] = 0xA3,
-        ["AltLeft"] = 0xA4, ["AltRight"] = 0xA5, ["Pause"] = 0x13, ["CapsLock"] = 0x14,
-        ["Escape"] = 0x1B, ["Space"] = 0x20, ["PageUp"] = 0x21, ["PageDown"] = 0x22,
-        ["End"] = 0x23, ["Home"] = 0x24, ["ArrowLeft"] = 0x25, ["ArrowUp"] = 0x26,
-        ["ArrowRight"] = 0x27, ["ArrowDown"] = 0x28, ["Insert"] = 0x2D, ["Delete"] = 0x2E,
-        ["MetaLeft"] = 0x5B, ["MetaRight"] = 0x5C,
-        ["Semicolon"] = 0xBA, ["Equal"] = 0xBB, ["Comma"] = 0xBC, ["Minus"] = 0xBD,
-        ["Period"] = 0xBE, ["Slash"] = 0xBF, ["Backquote"] = 0xC0, ["BracketLeft"] = 0xDB,
-        ["Backslash"] = 0xDC, ["BracketRight"] = 0xDD, ["Quote"] = 0xDE
-    };
-
-    public static void Key(string code, bool pressed)
-    {
-        ushort vk;
-        if (code.Length == 4 && code.StartsWith("Key", StringComparison.Ordinal) && char.IsAsciiLetterUpper(code[3]))
-            vk = code[3];
-        else if (code.Length == 6 && code.StartsWith("Digit", StringComparison.Ordinal) && char.IsAsciiDigit(code[5]))
-            vk = code[5];
-        else if (code.Length >= 2 && code[0] == 'F' && int.TryParse(code[1..], out int fn) && fn is >= 1 and <= 12)
-            vk = (ushort)(0x6F + fn);
-        else if (!Special.TryGetValue(code, out vk)) return;
-        Send(new INPUT { type = InputKeyboard, data = new Payload { key = new KEYBDINPUT { virtualKey = vk, flags = pressed ? 0u : KeyUp } } });
+        if (input is not null) Send(input.Value);
     }
 
+    public static void Wheel(int delta, bool horizontal) =>
+        Send(MouseInput(horizontal ? HWheelFlag : WheelFlag, data: unchecked((uint)delta)));
+
+    /// <summary>Presses or releases one physical key. Returns false for unknown key codes.</summary>
+    public static bool Key(string code, bool pressed)
+    {
+        uint up = pressed ? 0 : KeyUp;
+        if (KeyMap.TryGetScanCode(code, out ushort scan, out bool extended))
+            Send(KeyInput(0, scan, ScanCode | up | (extended ? ExtendedKey : 0)));
+        else if (KeyMap.TryGetVirtualKey(code, out ushort vk, out bool vkExtended))
+            Send(KeyInput(vk, 0, up | (vkExtended ? ExtendedKey : 0)));
+        else
+            return false;
+        return true;
+    }
+
+    /// <summary>Types text as Unicode key events. Line breaks and tabs become real Enter and
+    /// Tab presses, because many apps ignore a Unicode "\n".</summary>
     public static void TypeText(string value)
     {
-        // KEYEVENTF_UNICODE encodes UTF-16 code units; SendInput supports surrogate pairs.
+        var batch = new List<INPUT>(128);
         foreach (char ch in value)
         {
-            Send(
-                new INPUT { type = InputKeyboard, data = new Payload { key = new KEYBDINPUT { virtualKey = 0, scanCode = ch, flags = Unicode } } },
-                new INPUT { type = InputKeyboard, data = new Payload { key = new KEYBDINPUT { virtualKey = 0, scanCode = ch, flags = Unicode | KeyUp } } }
-            );
+            switch (ch)
+            {
+                case '\r': continue; // "\r\n" types a single Enter
+                case '\n': batch.Add(KeyInput(0, 0x1C, ScanCode)); batch.Add(KeyInput(0, 0x1C, ScanCode | KeyUp)); break;
+                case '\t': batch.Add(KeyInput(0, 0x0F, ScanCode)); batch.Add(KeyInput(0, 0x0F, ScanCode | KeyUp)); break;
+                default: batch.Add(KeyInput(0, ch, Unicode)); batch.Add(KeyInput(0, ch, Unicode | KeyUp)); break;
+            }
+            if (batch.Count >= 128) { Send(batch.ToArray()); batch.Clear(); }
         }
+        Send(batch.ToArray());
     }
 }

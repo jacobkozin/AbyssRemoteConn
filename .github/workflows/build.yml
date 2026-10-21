@@ -9,42 +9,25 @@ permissions:
   contents: read
 
 jobs:
-  static-checks:
-    name: Static source checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Check browser JavaScript syntax
-        run: node --check src/AbyssRemote.Host/wwwroot/app.js
-      - name: Run source integrity checks
-        run: node tests/source-integrity.mjs
-      - name: Run R3 regressions
-        run: node tests/r3-regression.mjs
-      - name: Run R3.1 regressions
-        run: node tests/r31-regression.mjs
-      - name: Run R3.3 regressions
-        run: node tests/r33-regression.mjs
-
   build-test:
-    name: Windows build and HTTPS smoke test
+    name: Tests, publish and HTTPS self-test (Windows)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Publish Windows host
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The same script BUILD-AND-TEST.bat runs: .NET unit + integration tests, browser
+      # client checks, self-contained publish, then the published host's HTTPS self-test.
+      - name: Build and test
         shell: powershell
-        run: ./scripts/Build-Windows.ps1
-      - name: Test HTTPS startup and unauthenticated route restrictions
-        shell: powershell
-        run: ./scripts/Smoke-Test.ps1
+        run: ./scripts/Build-And-Test.ps1
       - name: Archive unsigned build
         uses: actions/upload-artifact@v4
         with:
-          name: AbyssRemote-0.3.3-windows-x64-unsigned
+          name: AbyssRemote-windows-x64-unsigned
           path: dist/win-x64/
           retention-days: 7
