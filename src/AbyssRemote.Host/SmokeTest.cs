@@ -63,7 +63,7 @@ public static class SmokeTest
                 Check(reply.StatusCode == HttpStatusCode.MisdirectedRequest, "an unknown Host header is refused (421, DNS-rebinding defense)");
             }
 
-            foreach (var path in new[] { "/api/v1/stream", "/api/v1/control" })
+            foreach (var path in new[] { "/api/v1/stream", "/api/v1/video", "/api/v1/audio", "/api/v1/control" })
             {
                 using var socket = new ClientWebSocket();
                 socket.Options.RemoteCertificateValidationCallback = (_, presented, _, _) => Pinned(presented as X509Certificate2);

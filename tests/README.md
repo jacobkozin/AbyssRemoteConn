@@ -1,22 +1,43 @@
-# Testing and validation
+# Tests
 
-`node --check src/AbyssRemote.Host/wwwroot/app.js` validates JavaScript syntax.
+## .NET tests: `dotnet test tests\AbyssRemote.Tests`
 
-`node tests/source-integrity.mjs` checks HTML/JavaScript link integrity and presence of critical security defenses. These are **static smoke checks**, not proof that the C# code compiles or that the system is secure.
+MSTest, 102 tests, no network or hardware needed.
 
-On Windows with .NET 10 SDK:
+- **Unit tests:** pairing limits and expiry (with a manual clock), session cookie checks and
+  storage, CSRF, origin matching, host allowlist, the private-address filter, certificate
+  coverage, command-line options, keyboard scan codes, controller mapping and IOCTL codes,
+  H.264 Annex B / AVCC / avcC conversion, stream sizing.
+- **Integration tests** (`ServerIntegrationTests`, `GameModeProtocolTests`): each test starts
+  the real web server (Kestrel, TLS with a throwaway certificate, all middleware and endpoints)
+  on a free loopback port, with fake desktop, input, clipboard, video and audio sources that
+  record what reaches them. The tests then act as a browser, or as an attacker without a
+  session, a wrong origin, a wrong CSRF token, a revoked device or oversized messages, and
+  check that nothing reaches the fakes unless every check passed. They also cover pairing,
+  cookies, revocation, reconnect replacement, input release on disconnect, and the
+  JPEG/Game-mode/audio protocols including flow control.
 
-```powershell
-.\scripts\Build-Windows.ps1
-.\scripts\Smoke-Test.ps1
-```
+## Browser client checks: `node tests\web\client-checks.mjs`
 
-The PowerShell wrapper invokes the built host with `--smoke-test`. The host itself starts the real HTTPS server, checks the `info` endpoint and bundled homepage, ensures protected APIs return `401`, and stops. The managed test HTTP client **pins the exact certificate the running host generated**. No PowerShell TLS callbacks or global trust-policy changes are used, and browser trust is unaffected.
+Every browser module parses as an ES module, imports resolve, every element id the scripts
+use exists, there are no inline scripts or styles (the CSP would block them), nothing loads
+from other sites, every WebSocket carries the CSRF subprotocol, and the cache-busting version
+matches the project version.
 
-Additional **manual** testing needed on Windows + Safari/iOS: persistent TLS private key on restart, root trust, pairing success and expiration, screen update, mouse/keyboard, clipboard, multi-monitor selection, stream reconnect, and revoked-device denial. No Windows runtime access was available during initial code generation.
+## Published host self-test: `AbyssRemote.Host.exe --smoke-test`
 
-R3 checks: `node tests/r3-regression.mjs` verifies frame pacing, captured buffer reuse, immersive/fit UI, input behavior, and repository exclusions.
+Starts the real published host with its real certificate on a free loopback port, checks it
+from outside with the certificate pinned (no system trust changes), confirms the UI and
+security headers, and confirms that every API route and WebSocket refuses anonymous access.
+`TEST-HOST.bat` runs it.
 
-R3.1 checks: `node tests/r31-regression.mjs` verifies the high-clarity stream profile, immersive mobile frame, and keyboard controls.
+## Game mode on real hardware: `AbyssRemote.Host.exe --probe-video`
 
-R3.3 checks: `node tests/r33-regression.mjs` verifies the current release version, Fit-preserving layout, safe-area-aware margins, and touch gestures.
+Builds the GPU capture + hardware encoder pipeline on every monitor and reports the encoder,
+frame rate, encode time and bitrate.
+
+## Manual testing still needed
+
+On an iPhone or iPad: pairing and root-certificate trust, touch gestures, Game mode decoding,
+sound, a controller with the ViGEmBus driver installed on the PC, and the Home Screen app. See
+[docs/ROADMAP.md](../docs/ROADMAP.md).

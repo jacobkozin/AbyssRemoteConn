@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.0.0
+
+Security
+- Pairing code destroyed after 20 wrong guesses in total (on top of the per-address limit).
+- LAN mode refuses public IP addresses before TLS; `Host` header allowlist (DNS rebinding).
+- Every WebSocket requires cookie + exact Origin + CSRF; revocation closes live sockets at once.
+- Device names stripped of control characters; always runs as Production (no stack traces).
+- Server certificate reissued from the same root when the LAN address changes; old leaf removed.
+- See docs/SECURITY.md for the full list of R3.3 issues fixed.
+
+Streaming
+- Desktop mode: frame pacing fixed (about 8 fps to 26–27 fps on the dev PC), unchanged frames
+  skipped, mouse cursor drawn, clear message on the lock screen / UAC.
+- New Game mode: DXGI Desktop Duplication, GPU color conversion, hardware H.264 through Media
+  Foundation, WebCodecs in the browser, 60 fps with at most two frames in flight, pointer drawn
+  by the browser, live stats, automatic fallback to Desktop mode. `--probe-video` diagnostics.
+- New: PC sound (WASAPI loopback to an AudioWorklet with an adaptive buffer).
+- 1 ms timer resolution while streaming (Windows' 15.6 ms default capped 60 fps at about 32).
+
+Input
+- Scan-code keyboard (layout- and game-friendly), extended keys, back/forward buttons, smooth
+  wheel, horizontal wheel, Enter/Tab in typed text, "Lock mouse" for games.
+- No stuck keys, buttons or controllers after a disconnect or focus loss.
+- New: controllers through a virtual Xbox 360 pad (ViGEmBus, installed by the user).
+- Missing numeric fields count as 0 (a `move` without `dx` used to jump 400 px left).
+
+Reliability and UI
+- Reconnect fetches a fresh CSRF token (input never came back after a host restart), keepalive
+  timeouts, newest connection per device wins, clear close codes.
+- Default port 8444 (8443 collided with another local server), `--port`, clear port-in-use error.
+- Remembered viewer settings, clipboard in the phone keyboard sheet, Home Screen web app,
+  Fullscreen API + Keyboard Lock, quick panel no longer clipped on narrow phones, stylesheet
+  consolidated, ResizeObserver layout.
+
+Tooling
+- MSTest suite (102 unit and integration tests against the real HTTPS server with fakes)
+  replaces the regex-on-source checks; Node client checks; one-command `BUILD-AND-TEST.bat`.
+
 ## 0.3.3 — R3.3
 
 - Preserved Fit mode as the default through immersive-mode and orientation changes, preventing accidental edge cropping.

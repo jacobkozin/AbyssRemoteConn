@@ -1,78 +1,145 @@
-# Abyss Remote R3.3 API contract
+# API
 
-Version: `v1` / application `0.3.3`.
-
-The Windows host serves HTTPS on port `8443` and an API under `/api/v1/`. The application uses native Windows services, not external remote desktop APIs. JSON bodies must use `Content-Type: application/json`. Static browser assets and requests are same-origin only. The remote control channels require a paired `abyss_remote_session` Secure/HttpOnly/SameSite=Strict cookie.
+Version `v1`, application 1.0.0. The host serves HTTPS on port 8444 (`--port` to change). All
+routes are under `/api/v1/`. JSON bodies need `Content-Type: application/json`. Clients must
+tolerate unknown fields; new behavior that would break existing clients belongs under a new
+version.
 
 ## Authentication
 
-1. On the PC's console, press `P` to generate an 8-digit code valid for 10 minutes and one success. Codes are rate-limited to 5 attempts per client address in 5 minutes.
-2. From the browser, `POST /api/v1/pair` with `{"code":"01234567", "label":"My iPhone"}`. The server creates a random 256-bit secret, stores only its SHA-256 hash and sets a secure session cookie. Only same-Origin POST requests accepted.
-3. `GET /api/v1/me` returns `{"id":"…","device":"…","csrf":"64_HEX_DIGITS","version":"0.3.3"}`. CSRF material is session-bound and regenerated when the host restarts.
-4. All mutating authenticated REST requests add header `X-Abyss-CSRF: <csrf>` and must have a matching `Origin` header. WebSocket input includes protocols `abyss-v1`, `<csrf>`, where the server accepts `abyss-v1`.
-5. `POST /api/v1/logout` immediately revokes the current paired device token and clears the cookie.
+1. Pairing code: shown in the host console (press `P` there for a new one). 8 digits, valid 10
+   minutes, works once. Limits: 5 tries per address per 5 minutes; 20 wrong tries in total
+   destroy the code.
+2. `POST /api/v1/pair` with `{"code":"01234567","label":"My iPhone"}` and a same-origin
+   `Origin` header. On success the host sets the cookie
+   `abyss_remote_session` (`Secure; HttpOnly; SameSite=Strict; Path=/`, 30 days).
+3. `GET /api/v1/me` returns `{ id, device, csrf, version, features: { gameMode } }`. The CSRF
+   token changes every time the host starts; fetch it again after reconnecting.
+4. State-changing requests send header `X-Abyss-CSRF: <csrf>` and a matching `Origin`.
+5. Every WebSocket requests the subprotocols `abyss-v1, <csrf>` and needs the cookie and a
+   matching `Origin`; the host accepts `abyss-v1`. A failed check is a plain HTTP 403 (the
+   browser only sees the socket fail; call `/api/v1/me` to tell 401 from other problems).
 
 ## REST
 
-| Route | Auth required | Body / result |
+| Route | Needs | Result |
 | --- | --- | --- |
-| `GET /api/v1/info` | No | App version; listening mode |
-| `POST /api/v1/pair` | Physical PIN | `{code,label}`; sets cookie |
-| `GET /api/v1/me` | Yes | Device ID and CSRF |
-| `GET /api/v1/displays` | Yes | Array of `{id,name,x,y,width,height,primary}` |
-| `GET /api/v1/devices` | Yes | Array of paired device descriptions (no secrets) |
-| `DELETE /api/v1/devices/{id}` | Yes + CSRF | Revoke paired device |
-| `POST /api/v1/logout` | Yes + CSRF | Revoke this device |
-| `GET /api/v1/health` | Yes | Health and host UTC time |
-| `GET /api/v1/clipboard` | Yes | `{text}` (first 4,096 characters) |
-| `POST /api/v1/clipboard` | Yes + CSRF | `{text}` to replace Windows text clipboard (max 4,096) |
+| `GET /api/v1/info` | nothing | `{ app, version }` |
+| `POST /api/v1/pair` | Origin | `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries |
+| `GET /api/v1/me` | cookie | `{ id, device, csrf, version, features }` |
+| `GET /api/v1/displays` | cookie | `[{ id, name, x, y, width, height, primary }]` in physical pixels |
+| `GET /api/v1/devices` | cookie | `[{ id, name, createdUtc, lastSeenUtc, expiresUtc }]` (no secrets) |
+| `DELETE /api/v1/devices/{id}` | cookie + Origin + CSRF | Revokes the device and closes its sockets |
+| `POST /api/v1/logout` | cookie + Origin + CSRF | Revokes this device |
+| `GET /api/v1/health` | cookie | `{ healthy, time }` |
+| `GET /api/v1/clipboard` | cookie | `{ text }` (first 4,096 characters of the PC's text clipboard) |
+| `POST /api/v1/clipboard` | cookie + Origin + CSRF | `{ text }` (at most 4,096 characters) replaces the PC's text clipboard |
 
-## Screen stream (R3+ client-paced protocol)
+Every response carries a strict Content-Security-Policy, `X-Frame-Options: DENY`,
+`nosniff`, `no-referrer` and `Cache-Control: no-store`. Requests naming an unknown host get
+421.
 
-`WSS /api/v1/stream?display=0&fps=18&quality=58&width=1280`
+## WebSocket close codes
 
-- Paired cookie and strict Origin check are mandatory. Maximum two concurrent streams, additional requests rejected with HTTP 429.
-- **Changed in 0.3.0:** The socket is *client-paced*: after opening it, the browser sends a complete **UTF-8 text WebSocket message** containing `next` (four lowercase bytes). The server responds with one complete binary JPEG frame. After decoding/drawing it, the client sends another `next`. Invalid requests end the stream. This caps in-flight images and prevents old frames building up on slower devices. A R2.1 browser **cannot** use the R3 streaming socket without this message: update both host and UI together.
-- Maximum requested FPS `1..24` (actual throughput depends on host capture, encoding, browser decoding and network). Quality `30..85`, width `480..2560`. Width is capped by the monitor width and height tracks its aspect ratio.
-- Changing display, FPS or quality opens a new video connection; input remains on a separate authenticated channel. Fit/Fill/Stretch and Zoom are browser-only display transformations and do **not** change cursor coordinates or physical monitor resolution.
-- Per-viewer Windows GDI capture buffers are reused between frames, but this is **still CPU-based JPEG streaming**; it does not guarantee 24 FPS on high-resolution displays, HDR or games.
+| Code | Meaning | Browser behavior |
+| --- | --- | --- |
+| 4001 | Device revoked, signed out or expired | Back to pairing |
+| 4008 | Replaced by a newer connection from the same device | Stops; offer Reconnect |
+| 4029 | Too many connections to the host | Retry with backoff |
+| 4415 | Not supported on this PC (no hardware encoder, no audio device) | Game mode falls back to Desktop mode; sound turns off |
+| 1012 | Video pipeline restarted (for example the monitor resolution changed) | Reconnect |
+| 1007 / 1009 | Malformed or oversized message | Reconnect |
 
-## Input channel
+Limits per device: two video sockets (Desktop or Game mode), one input socket, one audio
+socket; at most six of each kind on the host.
 
-`WSS /api/v1/control`
+## Desktop mode video: `WSS /api/v1/stream`
 
-- Requires paired cookie, strict Origin, and requested WebSocket protocols `abyss-v1,<csrf>`.
-- UTF-8 JSON messages (max 8,192 bytes). Unknown event types are ignored.
-- At most 2 simultaneous control sockets.
+Query: `display` (index), `fps` 1–30 (default 18), `quality` 30–90 (default 85), `width`
+480–3840 (capped at the monitor's width; height keeps the aspect ratio).
 
-Example events:
+The browser sends the text message `next` (or `full` to force a frame even if nothing
+changed); the host answers each with exactly one message:
+
+- binary: a JPEG of the monitor (mouse pointer included);
+- text `{"type":"idle"}`: nothing changed for a second;
+- text `{"type":"unavailable","message":"…"}`: Windows is blocking capture (lock screen, UAC).
+
+Anything other than `next`/`full` closes the socket (1007).
+
+## Game mode video: `WSS /api/v1/video`
+
+Query: `display`, `fps` 10–120 (default 60), `height` 360–2160 (default 1080; never larger
+than the monitor), `bitrate` in kbit/s 2,000–80,000 (default 20,000).
+
+Host to browser:
+
+- text `{"type":"config","codec":"avc1.64002a","description":"<base64 avcC>","width","height","desktopWidth","desktopHeight","encoder"}`
+  before the first frame. Configure a WebCodecs `VideoDecoder` with `codec` and
+  `description`.
+- binary frame: a 12-byte header followed by H.264 in AVCC form (4-byte big-endian NAL
+  lengths):
+
+  | Bytes | Field |
+  | --- | --- |
+  | 0 | message type, 1 = video frame |
+  | 1 | flags, bit 0 = keyframe |
+  | 2–3 | reserved (0) |
+  | 4–7 | frame id, uint32 little-endian |
+  | 8–11 | capture time in ms since the stream started, uint32 little-endian |
+
+- text `{"type":"cursor","x","y","visible"}`: mouse pointer position. `x`,`y` are the top-left
+  of the pointer image in monitor pixels.
+- text `{"type":"cursorImage","png":"<base64>","hotX","hotY","width","height"}`: a new
+  pointer shape.
+- text `{"type":"unavailable","message"}` / `{"type":"resumed"}`: capture blocked or back.
+- text `{"type":"stats","fps","mbps","encodeMs","deliverMs"}` about once a second.
+  `deliverMs` is the time from sending a frame until its `ack` came back.
+
+Browser to host:
+
+- `ack <frame id>` after a frame is decoded. The host starts with two credits and earns one
+  back per ack of a frame it really sent, so at most two frames are ever in flight.
+- `key`: make the next frame a keyframe (new decoder or a decode error).
+
+Anything else ends the stream.
+
+## Sound: `WSS /api/v1/audio`
+
+The host first sends `{"type":"config","sampleRate":48000,"channels":2,"format":"s16le","chunkMs":10}`,
+then binary chunks of 10 ms: 480 frames of interleaved stereo signed 16-bit little-endian PCM
+(1,920 bytes). Chunks keep coming during silence. The browser sends nothing.
+
+## Input: `WSS /api/v1/control`
+
+UTF-8 JSON text messages of at most 8,192 bytes. Unknown kinds are ignored, numbers are
+clamped, and a missing number counts as 0.
 
 ```json
 {"kind":"pointer","display":0,"x":0.45,"y":0.62}
-```
-
-Coordinates are normalized `[0,1]` within the selected display. Sender must convert local canvas touches into proportions of the displayed frame.
-
-```json
 {"kind":"move","dx":12,"dy":-5}
 {"kind":"mouse","button":0,"action":"down"}
-{"kind":"mouse","button":0,"action":"up"}
 {"kind":"wheel","delta":-120}
+{"kind":"hwheel","delta":120}
 {"kind":"key","code":"KeyA","action":"down"}
-{"kind":"key","code":"KeyA","action":"up"}
-{"kind":"text","text":"Hello from Safari"}
+{"kind":"text","text":"Hello from Safari\n"}
+{"kind":"gamepad","index":0,"buttons":4097,"lt":0,"rt":1,"lx":0.5,"ly":-1,"rx":0,"ry":0}
+{"kind":"release"}
+{"kind":"ping","t":1234.5}
 ```
 
-- Mouse buttons: `0=left`, `1=middle`, `2=right`.
-- `wheel` delta uses Windows wheel unit convention, clamped to ±1200.
-- Supported key codes include `KeyA..KeyZ`, `Digit0..Digit9`, `F1..F12`, arrow keys, Escape, Backspace, Tab, Enter, modifier keys, common punctuation and navigation keys. Not all keyboard layouts have been tested.
-- `text` simulates a series of Unicode UTF-16 code-unit key events and is limited to 2,048 characters per event.
-- On control WebSocket disconnect, the server attempts to release held mouse buttons.
-
-## Wire stability / evolution
-
-R3.3 remains intentionally small and versioned at `/api/v1`. Future encoders, authentication, relay transport and native clients should be added behind interfaces and/or new versioned endpoints without altering the existing v1 wire types without a version bump. The client must tolerate unknown fields.
-
-## Browser viewport / mobile controls
-
-Fit preserves the entire desktop image with letterboxing; Fill crops the image to cover the stage; Stretch distorts the aspect ratio; Zoom increases the rendered dimensions and allows panning with two touches. All input uses the canvas' actual rendered rectangle (rather than the overall stage). Direct touch taps to click, hold to begin drag, or use trackpad mode. Full screen uses CSS immersive fallback for iOS Safari, which may retain system/browser UI.
+- `pointer`: `x`,`y` are 0–1 within the chosen monitor. `move`: relative, ±4,000.
+- `mouse`: buttons 0 left, 1 middle, 2 right, 3 back, 4 forward.
+- `wheel`/`hwheel`: Windows wheel units (120 per notch), ±1,200.
+- `key`: `code` is a `KeyboardEvent.code`; the host sends the matching PC/AT scan code, so the
+  PC's keyboard layout decides the character.
+- `text`: up to 2,048 characters typed as Unicode; line breaks and tabs become real Enter and
+  Tab presses.
+- `gamepad`: W3C "standard" gamepad layout. `buttons` has one bit per standard button
+  (0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 8 Back, 9 Start, 10 LS, 11 RS, 12–15 D-pad up/down/left/right,
+  16 Guide); triggers 0–1; sticks −1–1 with Y down positive. `index` 0–3 picks the virtual
+  controller. Needs the ViGEmBus driver; otherwise the host replies once with
+  `{"type":"notice","message":"…"}`.
+- `release`: let go of every key, button and controller this connection holds (sent when the
+  page loses focus; the host also does it on disconnect).
+- `ping`: the host answers `{"type":"pong","t":…}` with the same `t`.

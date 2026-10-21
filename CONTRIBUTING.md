@@ -1,30 +1,31 @@
 # Contributing
 
-Abyss Remote controls a Windows desktop, so security and clear validation boundaries matter more than feature count.
+Abyss Remote controls a Windows desktop, so security and clear validation boundaries matter
+more than feature count.
 
 ## Before submitting a change
 
-1. Never commit or attach `settings.json`, pairing codes, cookies, device names, certificate files, private keys, private IP addresses, logs, crash dumps, or generated builds.
-2. Preserve loopback-only behavior as the default. LAN access must remain explicit and limited to trusted private networks.
-3. Do not weaken HTTPS, origin validation, CSRF checks, cookie flags, pairing expiry, rate limits, or revocation behavior for convenience.
-4. Run the static checks:
-
-   ```powershell
-   node --check src/AbyssRemote.Host/wwwroot/app.js
-   node tests/source-integrity.mjs
-   node tests/r3-regression.mjs
-   node tests/r31-regression.mjs
-   node tests/r33-regression.mjs
-   ```
-
-5. On Windows with the .NET 10 SDK, run `BUILD-AND-TEST.bat`.
+1. Never commit or attach `settings.json`, pairing codes, cookies, device names, certificate
+   files, private keys, private IP addresses, logs, crash dumps or generated builds.
+2. Keep loopback-only as the default. LAN access must stay explicit and limited to private
+   networks.
+3. Do not weaken TLS, the Origin and CSRF checks, cookie flags, pairing limits, revocation or
+   the private-address filter for convenience.
+4. Run everything with `BUILD-AND-TEST.bat` (or `.\scripts\Build-And-Test.ps1`): the .NET unit
+   and integration tests, the browser client checks, the publish and the published host's
+   self-test.
+5. If you touch Game mode, also run `dist\win-x64\AbyssRemote.Host.exe --probe-video`.
 
 ## Pull requests
 
-- Explain the threat-model impact of authentication, transport, input, clipboard, certificate, or firewall changes.
-- Add regression coverage for browser/host protocol changes.
-- Document which Windows, browser, and device combinations were tested.
-- Keep generated `dist`, `bin`, and `obj` trees out of the change.
-- Scrub personal paths and network details from diagnostics.
+- Explain the threat-model impact of changes to authentication, transport, input, clipboard,
+  sound, certificates or the firewall.
+- New endpoints go through `AbyssServer.RunSocketAsync` (sockets) or the `Authorized` check
+  (state-changing REST), and get an integration test that attacks them without a session.
+- Native interop: take slot numbers, GUIDs and struct layouts from the Windows SDK headers and
+  note the interface and slot next to each call.
+- Say which Windows, browser and device combinations you tested.
+- Keep `dist`, `bin` and `obj` out of the change; scrub personal paths and addresses from logs.
 
-Do not use a public issue for a vulnerability that could expose a user's screen, input, clipboard, credentials, or certificate trust. Follow the private-reporting guidance in `docs/SECURITY.md`.
+Do not use a public issue for a vulnerability that could expose someone's screen, input,
+clipboard, sound or certificate trust. Follow [docs/SECURITY.md](docs/SECURITY.md).

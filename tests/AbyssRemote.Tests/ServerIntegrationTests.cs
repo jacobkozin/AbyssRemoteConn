@@ -29,11 +29,13 @@ public sealed class ServerIntegrationTests
             using var reply = await client.Http.GetAsync(route);
             Assert.AreEqual(HttpStatusCode.Unauthorized, reply.StatusCode, route);
         }
-        foreach (var path in new[] { "/api/v1/stream", "/api/v1/control" })
+        foreach (var path in new[] { "/api/v1/stream", "/api/v1/video", "/api/v1/audio", "/api/v1/control" })
             await Assert.ThrowsAsync<WebSocketException>(() => client.ConnectAsync(path));
 
         Assert.AreEqual(0, _server.Desktop.Commands.Count);
         Assert.AreEqual(0, _server.Desktop.SinksOpen);
+        Assert.IsNull(_server.Desktop.LastVideo);
+        Assert.IsNull(_server.Desktop.LastAudio);
     }
 
     [TestMethod]
