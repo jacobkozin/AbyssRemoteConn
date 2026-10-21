@@ -5,6 +5,7 @@
 import { startJpegStream } from './jpeg-stream.js';
 import { startVideoStream, gameModeSupported } from './video-stream.js';
 import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
+import { watchGamepads } from './gamepad.js';
 
 const $ = (id) => document.getElementById(id);
 const desktop = $('desktop');
@@ -265,7 +266,11 @@ async function toggleSound() {
 function openControl(epoch) {
   const control = new WebSocket(wsUrl('/api/v1/control'), [PROTOCOL, state.csrf]);
   state.control = control;
-  control.onopen = () => { if (epoch === state.epoch) setNetwork('Connected', true); };
+  control.onopen = () => {
+    if (epoch !== state.epoch) return;
+    setNetwork('Connected', true);
+    gamepads.resync();
+  };
   control.onmessage = (event) => { if (epoch === state.epoch) controlMessage(event.data); };
   control.onclose = (event) => { if (epoch === state.epoch) connectionLost('control', event.code); };
 }
@@ -295,7 +300,6 @@ function openVideo(epoch) {
         if (epoch !== state.epoch) return;
         state.desktopWidth = config.desktopWidth;
         state.desktopHeight = config.desktopHeight;
-        showError('');
       },
       onCursor: (cursor) => { if (epoch === state.epoch) moveCursor(cursor); },
       onCursorImage: (image) => { if (epoch === state.epoch) setCursorImage(image); },
@@ -1002,6 +1006,14 @@ $('signOut').addEventListener('click', async () => {
   if (!window.confirm('Sign out and revoke this device? You will need a new pairing code.')) return;
   try { await api('/api/v1/logout', { method: 'POST' }); showPair('Signed out.'); }
   catch (error) { showError(error.message); }
+});
+
+// Controllers work in both modes; the host answers with a notice if its driver is missing.
+const gamepads = watchGamepads({
+  send: (kind, data) => state.active && send(kind, data),
+  onChange: (names) => {
+    if (names.length) $('quickStatus').textContent = `🎮 ${names.length} controller${names.length > 1 ? 's' : ''} connected`;
+  },
 });
 
 applySettings(loadSettings());

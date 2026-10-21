@@ -203,20 +203,20 @@ internal static class Gdi
     [DllImport("gdi32.dll")] public static extern bool GdiFlush();
 }
 
-/// <summary>Input for one control connection. It remembers which keys and mouse buttons it
-/// pressed so a dropped connection or a lost browser focus can never leave Ctrl, Alt, Shift,
-/// Windows or a mouse button stuck down on the PC.</summary>
+/// <summary>Input for one control connection. It remembers which keys, mouse buttons and
+/// virtual controllers it is using, so a dropped connection or a lost browser focus can never
+/// leave Ctrl, Alt, Shift, Windows, a mouse button or a controller stuck down on the PC.</summary>
 public sealed class NativeInputSink : IInputSink
 {
     private readonly DesktopEngine _desktop;
-    private readonly Action<object> _notify;
     private readonly HashSet<string> _keysDown = new(StringComparer.Ordinal);
     private readonly HashSet<int> _buttonsDown = new();
+    private readonly GameMode.GamepadSet _gamepads;
 
     internal NativeInputSink(DesktopEngine desktop, Action<object> notify)
     {
         _desktop = desktop;
-        _notify = notify;
+        _gamepads = new GameMode.GamepadSet(notify);
     }
 
     public void Handle(JsonElement command)
@@ -263,6 +263,9 @@ public sealed class NativeInputSink : IInputSink
                 if (text.Length <= 2048) NativeInput.TypeText(text);
                 break;
             }
+            case "gamepad":
+                _gamepads.Handle(command);
+                break;
             case "release":
                 ReleaseAll();
                 break;
@@ -275,9 +278,14 @@ public sealed class NativeInputSink : IInputSink
         foreach (string code in _keysDown) NativeInput.Key(code, false);
         _buttonsDown.Clear();
         _keysDown.Clear();
+        _gamepads.ReleaseAll();
     }
 
-    public void Dispose() => ReleaseAll();
+    public void Dispose()
+    {
+        ReleaseAll();
+        _gamepads.Dispose();
+    }
 }
 
 /// <summary>Reads fields from untrusted control messages, always clamped to a safe range.</summary>
@@ -292,9 +300,11 @@ public static class InputCommand
         return (int)Math.Clamp(Math.Round(value), min, max);
     }
 
+    // Missing or invalid numbers count as 0 (clamped into range): a message without "ly" must
+    // mean "stick centered", not "stick at the end of its range".
     public static double Double(JsonElement obj, string name, double min, double max)
     {
-        if (!obj.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number || !n.TryGetDouble(out double value) || !double.IsFinite(value)) return min;
+        if (!obj.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number || !n.TryGetDouble(out double value) || !double.IsFinite(value)) return Math.Clamp(0, min, max);
         return Math.Clamp(value, min, max);
     }
 
