@@ -238,6 +238,36 @@ public static class AbyssServer
             using (source) await VideoStream.RunAsync(live, source, () => c.State.IsActive(device.Id), ctx.RequestAborted);
         }));
 
+        // PC sound: a config message, then 10 ms chunks of 48 kHz stereo 16-bit PCM.
+        app.Map("/api/v1/audio", (HttpContext ctx) => RunSocketAsync(ctx, c, SocketKind.Audio, async (live, device) =>
+        {
+            IAudioSource source;
+            try { source = c.Desktop.CreateAudioSource(); }
+            catch (Exception ex) when (ex is AudioUnavailableException or GameMode.NativeCallException)
+            {
+                await live.CloseAsync(CloseCodes.Unsupported, ex.Message.Length <= 120 ? ex.Message : ex.Message[..117] + "...");
+                return;
+            }
+            using (source)
+            {
+                if (!await live.SendJsonAsync(new { type = "config", sampleRate = IAudioSource.SampleRate, channels = IAudioSource.Channels,
+                        format = "s16le", chunkMs = 10 }, ctx.RequestAborted)) return;
+                // The browser never sends anything here; reading just notices when it closes.
+                using var closed = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted);
+                var watch = WaitForCloseAsync(live, closed);
+                try
+                {
+                    await foreach (var chunk in source.Chunks.ReadAllAsync(closed.Token))
+                        if (!c.State.IsActive(device.Id) || !await live.SendAsync(chunk, WebSocketMessageType.Binary, closed.Token)) return;
+                }
+                finally
+                {
+                    closed.Cancel();
+                    try { await watch; } catch (Exception ex) when (ex is OperationCanceledException or WebSocketException) { }
+                }
+            }
+        }));
+
         // Mouse, keyboard and text input. Small JSON messages, see docs/API.md.
         app.Map("/api/v1/control", (HttpContext ctx) => RunSocketAsync(ctx, c, SocketKind.Control, async (live, device) =>
         {
@@ -300,6 +330,18 @@ public static class AbyssServer
             // The browser went away; nothing to report.
         }
         finally { await live.CloseAsync((int)WebSocketCloseStatus.NormalClosure, "Ended"); }
+    }
+
+    /// <summary>Reads (and ignores) incoming messages until the browser closes the socket, then cancels.</summary>
+    private static async Task WaitForCloseAsync(LiveSocket live, CancellationTokenSource onClose)
+    {
+        var buffer = new byte[256];
+        try
+        {
+            while (live.Socket.State == WebSocketState.Open)
+                if ((await live.Socket.ReceiveAsync(buffer.AsMemory(), onClose.Token)).MessageType == WebSocketMessageType.Close) return;
+        }
+        finally { onClose.Cancel(); }
     }
 
     private static int QueryInt(HttpContext ctx, string key, int fallback, int min, int max) =>

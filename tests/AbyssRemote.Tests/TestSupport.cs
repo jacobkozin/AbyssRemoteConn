@@ -54,6 +54,17 @@ public sealed class FakeDesktop : IDesktop
 
     public bool HardwareVideoAvailable => true;
 
+    /// <summary>What the audio endpoint creates. Default: three chunks of a known pattern.</summary>
+    public Func<IAudioSource> OnCreateAudio { get; set; } = () => new FakeAudioSource();
+    public FakeAudioSource? LastAudio { get; private set; }
+
+    public IAudioSource CreateAudioSource()
+    {
+        var source = OnCreateAudio();
+        LastAudio = source as FakeAudioSource;
+        return source;
+    }
+
     private sealed class Source(FakeDesktop owner) : IFrameSource
     {
         public byte[]? Capture(bool forceFullFrame) => owner.OnCapture(forceFullFrame);
@@ -110,6 +121,25 @@ public sealed class FakeVideoSource : IVideoSource
     {
         Disposed = true;
         _events.Writer.TryComplete();
+    }
+}
+
+public sealed class FakeAudioSource : IAudioSource
+{
+    private readonly System.Threading.Channels.Channel<byte[]> _chunks = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
+
+    public FakeAudioSource()
+    {
+        for (byte i = 1; i <= 3; i++) _chunks.Writer.TryWrite(Enumerable.Repeat(i, IAudioSource.ChunkBytes).ToArray());
+    }
+
+    public bool Disposed { get; private set; }
+    public System.Threading.Channels.ChannelReader<byte[]> Chunks => _chunks.Reader;
+
+    public void Dispose()
+    {
+        Disposed = true;
+        _chunks.Writer.TryComplete();
     }
 }
 

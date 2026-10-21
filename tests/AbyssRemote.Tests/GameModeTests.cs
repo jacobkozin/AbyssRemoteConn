@@ -103,6 +103,42 @@ public sealed class GameModeProtocolTests
     }
 
     [TestMethod]
+    public async Task AudioSendsConfigThenPcmChunks()
+    {
+        using var client = await _server.PairAsync();
+        using var socket = await client.ConnectAsync("/api/v1/audio");
+
+        var (type, data) = await socket.ReceiveMessageAsync();
+        var config = JsonDocument.Parse(data).RootElement;
+        Assert.AreEqual(WebSocketMessageType.Text, type);
+        Assert.AreEqual(48000, config.GetProperty("sampleRate").GetInt32());
+        Assert.AreEqual("s16le", config.GetProperty("format").GetString());
+        for (byte expected = 1; expected <= 3; expected++)
+        {
+            (type, data) = await socket.ReceiveMessageAsync();
+            Assert.AreEqual(WebSocketMessageType.Binary, type);
+            Assert.AreEqual(IAudioSource.ChunkBytes, data.Length);
+            Assert.IsTrue(data.All(b => b == expected));
+        }
+
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+        await Wait.UntilAsync(() => _server.Desktop.LastAudio!.Disposed);
+    }
+
+    [TestMethod]
+    public async Task AudioNeedsPairingAndReportsMissingDevices()
+    {
+        using var anonymous = _server.CreateClient();
+        await Assert.ThrowsAsync<WebSocketException>(() => anonymous.ConnectAsync("/api/v1/audio"));
+        Assert.IsNull(_server.Desktop.LastAudio);
+
+        _server.Desktop.OnCreateAudio = () => throw new AudioUnavailableException("This PC has no audio output device.");
+        using var client = await _server.PairAsync();
+        using var socket = await client.ConnectAsync("/api/v1/audio");
+        Assert.AreEqual(CloseCodes.Unsupported, await socket.WaitForCloseAsync());
+    }
+
+    [TestMethod]
     public async Task MeAdvertisesGameMode()
     {
         using var client = await _server.PairAsync();

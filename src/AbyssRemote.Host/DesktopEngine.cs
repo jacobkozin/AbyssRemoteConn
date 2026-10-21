@@ -33,6 +33,8 @@ public sealed class DesktopEngine : IDesktop
     });
 
     public bool HardwareVideoAvailable => _hardwareVideo.Value;
+
+    public IAudioSource CreateAudioSource() => new GameMode.SystemAudioCapture();
 }
 
 /// <summary>Desktop-mode capture for one viewer. The monitor is copied with BitBlt into a DIB

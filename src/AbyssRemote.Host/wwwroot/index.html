@@ -39,6 +39,7 @@
       <div class="session-head">
         <div class="session-title"><span class="session-dot"></span><div><strong>Live desktop</strong><span id="streamStats">Waiting for video…</span></div></div>
         <div class="session-actions">
+          <button id="soundToggle" class="toolbutton" title="Play the PC's sound on this device" aria-pressed="false">🔇 <span>Sound off</span></button>
           <button id="immersive" class="toolbutton accent" title="Use the entire screen" aria-pressed="false">⛶ <span>Full screen</span></button>
           <button id="refresh" class="toolbutton" title="Reconnect session">↻ <span>Reconnect</span></button>
           <button id="settingsToggle" class="toolbutton" title="Show viewing settings" aria-expanded="false">⚙ <span>Settings</span></button>
@@ -80,6 +81,7 @@
           <button type="button" id="quickRight" title="Right-click at the pointer">◌ <span>Right click</span></button>
           <button type="button" id="quickScrollUp">↑ <span>Scroll up</span></button>
           <button type="button" id="quickScrollDown">↓ <span>Scroll down</span></button>
+          <button type="button" id="quickSound" class="quick-wide" aria-pressed="false">🔇 <span>Sound off</span></button>
         </div>
         <div class="quick-options">
           <label id="quickStreamModeLabel" class="hidden">Mode <select id="quickStreamMode" aria-label="Stream mode"><option value="desktop">Desktop · sharp</option><option value="game">Game · 60 fps</option></select></label>

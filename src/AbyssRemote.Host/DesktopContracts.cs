@@ -25,7 +25,22 @@ public interface IDesktop
 
     /// <summary>True when at least one hardware H.264 encoder is installed (checked once).</summary>
     bool HardwareVideoAvailable { get; }
+
+    /// <summary>What the PC is playing, for the browser to play back. Throws
+    /// <see cref="AudioUnavailableException"/> when there is no output device.</summary>
+    IAudioSource CreateAudioSource();
 }
+
+/// <summary>PC sound as 10 ms chunks of 48 kHz stereo 16-bit little-endian PCM (1,920 bytes).
+/// Chunks keep coming during silence, so the browser can tell a quiet PC from a slow network.</summary>
+public interface IAudioSource : IDisposable
+{
+    public const int SampleRate = 48_000, Channels = 2, ChunkFrames = 480, ChunkBytes = ChunkFrames * Channels * 2;
+
+    System.Threading.Channels.ChannelReader<byte[]> Chunks { get; }
+}
+
+public sealed class AudioUnavailableException(string message) : Exception(message);
 
 public sealed record VideoSettings(int Display, int Fps, int BitrateKbps, int MaxHeight);
 

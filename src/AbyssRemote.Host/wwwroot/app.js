@@ -4,6 +4,7 @@
 // authenticated WebSocket as small JSON messages (see docs/API.md). No third-party code.
 import { startJpegStream } from './jpeg-stream.js';
 import { startVideoStream, gameModeSupported } from './video-stream.js';
+import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const desktop = $('desktop');
@@ -14,7 +15,7 @@ const SETTINGS_KEY = 'abyss-remote:settings';
 
 const state = {
   csrf: null, myId: null, active: false, stopped: false, features: {},
-  mode: 'desktop', gameAvailable: false,
+  mode: 'desktop', gameAvailable: false, soundOn: false, audio: null,
   displays: [], display: 0, preferredDisplay: null,
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
   zoom: 100, frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
@@ -45,7 +46,7 @@ function loadSettings() {
 }
 function saveSettings() {
   const data = { display: state.display, mode: $('modePick').value, fps: $('fpsPick').value,
-                 fit: state.fitUserSet ? $('fitPick').value : undefined, streamMode: state.mode,
+                 fit: state.fitUserSet ? $('fitPick').value : undefined, streamMode: state.mode, sound: state.soundOn,
                  gameHeight: $('gameHeightPick').value, gameFps: $('gameFpsPick').value, bitrate: $('bitratePick').value };
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); } catch { /* not remembered */ }
 }
@@ -62,6 +63,7 @@ function applySettings(saved) {
   if (pick('fitPick', saved.fit)) state.fitUserSet = true;
   if (Number.isInteger(saved.display)) state.preferredDisplay = saved.display;
   if (saved.streamMode === 'game') state.mode = 'game'; // confirmed once we know the PC and browser support it
+  state.soundOn = saved.sound === true; // still needs a tap after each page load before audio may play
 }
 
 // ---------------------------------------------------------------- views
@@ -167,6 +169,7 @@ function closeConnections() {
   state.epoch++;
   clearTimeout(state.retryTimer);
   state.retryTimer = 0;
+  stopAudio();
   state.stream?.stop();
   state.stream = null;
   const control = state.control;
@@ -185,6 +188,78 @@ function connect() {
   setNetwork('Connecting…');
   openControl(state.epoch);
   openVideo(state.epoch);
+  openAudio(state.epoch);
+}
+
+// ---------------------------------------------------------------- sound
+
+function setSoundButtons() {
+  for (const id of ['soundToggle', 'quickSound']) {
+    const button = $(id);
+    button.setAttribute('aria-pressed', String(state.soundOn));
+    button.firstChild.textContent = state.soundOn ? '🔊 ' : '🔇 ';
+    button.querySelector('span').textContent = state.soundOn ? 'Sound on' : 'Sound off';
+  }
+}
+
+function openAudio(epoch) {
+  if (!state.soundOn || !state.active || state.stopped || state.audio || epoch !== state.epoch) return;
+  if (!audioUnlocked()) { armAudioUnlock(); return; }
+  state.audio = startAudio({
+    url: wsUrl('/api/v1/audio'),
+    protocols: [PROTOCOL, state.csrf],
+    onClose: (code, reason) => {
+      if (epoch !== state.epoch) return;
+      state.audio = null;
+      if (code === CLOSE_UNSUPPORTED) {
+        state.soundOn = false;
+        setSoundButtons();
+        saveSettings();
+        showError(`Sound is not available: ${reason || 'no audio output on the PC'}.`);
+        return;
+      }
+      if (code === CLOSE_REVOKED || code === CLOSE_REPLACED) return; // video and input handle these
+      // Sound alone dropped (for example the PC's audio device changed): try again shortly.
+      setTimeout(() => openAudio(epoch), 2000);
+    },
+  });
+}
+
+function stopAudio() {
+  state.audio?.stop();
+  state.audio = null;
+}
+
+// After a page load, sound may only start inside a tap or key press.
+let unlockArmed = false;
+function armAudioUnlock() {
+  if (unlockArmed) return;
+  unlockArmed = true;
+  const unlock = async () => {
+    window.removeEventListener('pointerup', unlock, true);
+    window.removeEventListener('keydown', unlock, true);
+    unlockArmed = false;
+    try { await unlockAudio(); openAudio(state.epoch); } catch { /* stays off until the Sound button is used */ }
+  };
+  window.addEventListener('pointerup', unlock, true);
+  window.addEventListener('keydown', unlock, true);
+}
+
+async function toggleSound() {
+  if (state.soundOn) {
+    state.soundOn = false;
+    stopAudio();
+  } else {
+    try {
+      await unlockAudio();
+      state.soundOn = true;
+      openAudio(state.epoch);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+  setSoundButtons();
+  saveSettings();
 }
 
 function openControl(epoch) {
@@ -784,6 +859,8 @@ function setQuickMenu(open) {
   $('quickToggle').setAttribute('aria-label', open ? 'Hide remote controls' : 'Open remote controls');
 }
 $('immersive').addEventListener('click', () => setImmersive(!state.immersive));
+$('soundToggle').addEventListener('click', toggleSound);
+$('quickSound').addEventListener('click', toggleSound);
 $('quickToggle').addEventListener('click', () => setQuickMenu(!state.menuOpen));
 $('quickClose').addEventListener('click', () => setQuickMenu(false));
 $('quickKeyboard').addEventListener('click', () => { setQuickMenu(false); setKeyboard(true); });
@@ -928,4 +1005,5 @@ $('signOut').addEventListener('click', async () => {
 });
 
 applySettings(loadSettings());
+setSoundButtons();
 initialize();
