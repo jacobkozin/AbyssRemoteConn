@@ -127,7 +127,8 @@ public sealed class ServerIntegrationTests
         Assert.AreEqual(CloseCodes.Revoked, await phoneVideo.WaitForCloseAsync());
         using var me = await phone.Http.GetAsync("/api/v1/me");
         Assert.AreEqual(HttpStatusCode.Unauthorized, me.StatusCode);
-        await Wait.UntilAsync(() => _server.Desktop.SinksOpen == 0);
+        // Well under LiveSocket's 5 s fallback abort: the revocation itself must release the input.
+        await Wait.UntilAsync(() => _server.Desktop.SinksOpen == 0, timeoutMs: 2000);
     }
 
     [TestMethod]

@@ -19,6 +19,7 @@ public static class CloseCodes
 public sealed class LiveSocket
 {
     private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private readonly TaskCompletionSource _closing = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public LiveSocket(WebSocket socket) => Socket = socket;
 
@@ -40,6 +41,18 @@ public sealed class LiveSocket
     public Task<bool> SendJsonAsync(object message, CancellationToken ct) =>
         SendAsync(JsonSerializer.SerializeToUtf8Bytes(message), WebSocketMessageType.Text, ct);
 
+    /// <summary>Receives one message. Once this side has closed the socket (revoked, replaced) it
+    /// reports Close at once instead of waiting for the browser to answer, so a peer that never
+    /// answers cannot keep its handler, and the input sink that handler holds, alive.</summary>
+    public async Task<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken ct)
+    {
+        var receive = Socket.ReceiveAsync(buffer, ct).AsTask();
+        if (await Task.WhenAny(receive, _closing.Task) == receive) return await receive;
+        // Nobody reads the rest. The pending read fails once the connection closes; observe that.
+        _ = receive.ContinueWith(static t => _ = t.Exception, TaskScheduler.Default);
+        return new ValueWebSocketReceiveResult(0, WebSocketMessageType.Close, endOfMessage: true);
+    }
+
     /// <summary>Starts the close handshake. A peer that never answers (Wi-Fi gone, phone asleep)
     /// is aborted a few seconds later so it cannot hold a connection slot.</summary>
     public async Task CloseAsync(int code, string reason)
@@ -56,6 +69,7 @@ public sealed class LiveSocket
             finally { _sendLock.Release(); }
         }
         catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException) { }
+        _closing.TrySetResult(); // the owner's ReceiveAsync returns now; the abort below is the fallback
         _ = Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
         {
             try { if (Socket.State != WebSocketState.Closed) Socket.Abort(); }

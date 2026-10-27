@@ -25,7 +25,7 @@ public static class JpegStream
         var nextCaptureAt = TimeSpan.Zero;
         while (live.Socket.State == WebSocketState.Open)
         {
-            var message = await live.Socket.ReceiveAsync(request.AsMemory(), aborted);
+            var message = await live.ReceiveAsync(request.AsMemory(), aborted);
             if (message.MessageType == WebSocketMessageType.Close || !stillPaired()) return;
             string verb = message.MessageType == WebSocketMessageType.Text && message.EndOfMessage
                 ? Encoding.ASCII.GetString(request, 0, message.Count) : "";

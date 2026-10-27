@@ -275,7 +275,7 @@ public static class AbyssServer
             var buffer = new byte[8192];
             while (live.Socket.State == WebSocketState.Open)
             {
-                var message = await live.Socket.ReceiveAsync(buffer.AsMemory(), ctx.RequestAborted);
+                var message = await live.ReceiveAsync(buffer.AsMemory(), ctx.RequestAborted);
                 if (message.MessageType == WebSocketMessageType.Close || !c.State.IsActive(device.Id)) return;
                 if (message.MessageType != WebSocketMessageType.Text || !message.EndOfMessage)
                 {
@@ -322,6 +322,12 @@ public static class AbyssServer
         if (registration is null)
         {
             await live.CloseAsync(CloseCodes.Busy, "Too many connections to this PC");
+            return;
+        }
+        if (!c.State.IsActive(device.Id))
+        {
+            // Revoked after the cookie check but before Register, so CloseDevice never saw this socket.
+            await live.CloseAsync(CloseCodes.Revoked, "This device is no longer paired");
             return;
         }
         try { await body(live, device); }
