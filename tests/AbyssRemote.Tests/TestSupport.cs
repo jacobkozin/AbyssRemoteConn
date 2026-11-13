@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using AbyssRemote.Host;
+using AbyssRemote.Host.Features;
 using Microsoft.AspNetCore.Builder;
 
 namespace AbyssRemote.Tests;
@@ -163,6 +164,9 @@ public sealed class TestServer : IAsyncDisposable
     public FakeClipboard Clipboard { get; } = new();
     public PairingManager Pairing { get; } = new();
     public SessionRegistry Sessions { get; } = new();
+    public FakeHostActions Actions { get; } = new();
+    public FakeSteam Steam { get; } = new();
+    public TransferFolder Transfer { get; }
     public StateStore State { get; }
     public Uri BaseUri { get; private set; } = null!;
     public string Origin => $"https://{BaseUri.Authority}";
@@ -172,6 +176,7 @@ public sealed class TestServer : IAsyncDisposable
     {
         _dataDir = Directory.CreateTempSubdirectory("abyss-remote-test-").FullName;
         State = new StateStore(_dataDir);
+        Transfer = new TransferFolder(Path.Combine(_dataDir, "transfer"));
         _certificate = CreateCertificate();
         _app = AbyssServer.Build(new ServerContext
         {
@@ -184,6 +189,9 @@ public sealed class TestServer : IAsyncDisposable
             Desktop = Desktop,
             Clipboard = Clipboard,
             WebRoot = FindWebRoot(),
+            Transfer = Transfer,
+            Actions = Actions,
+            Steam = Steam,
             Notice = message => { lock (_notices) _notices.Add(message); },
             ConsoleLogging = false,
         });

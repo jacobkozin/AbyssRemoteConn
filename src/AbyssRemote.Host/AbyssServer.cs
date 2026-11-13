@@ -24,6 +24,20 @@ public sealed class ServerContext
     /// <summary>Security-relevant events for the host console: pairings, revocations, refusals.</summary>
     public Action<string> Notice { get; init; } = _ => { };
     public bool ConsoleLogging { get; init; } = true;
+
+    // Feature modules (see the Features folder). Each default is the real Windows
+    // implementation; tests pass a temporary folder and fakes instead.
+    public Features.TransferFolder Transfer { get; init; } = Features.TransferFolder.InDownloads();
+    public Features.IHostActions Actions { get; init; } = new Features.WindowsHostActions();
+    public Features.ISteam Steam { get; init; } = new Features.WindowsSteam();
+
+    /// <summary>The paired device this request's session cookie belongs to, or null.</summary>
+    public DeviceRecord? Device(HttpContext ctx) => State.Authenticate(ctx.Request.Cookies[AbyssServer.SessionCookie]);
+
+    /// <summary>The check for every state-changing request: paired cookie + exact Origin +
+    /// this device's CSRF token in the X-Abyss-CSRF header.</summary>
+    public bool Authorized(HttpContext ctx, DeviceRecord? device) =>
+        device is not null && RequestProtection.SameOrigin(ctx) && Protection.ValidCsrf(ctx.Request.Headers["X-Abyss-CSRF"], device.Id);
 }
 
 public static class AbyssServer
@@ -92,11 +106,8 @@ public static class AbyssServer
 
     private static void MapApi(WebApplication app, ServerContext c)
     {
-        DeviceRecord? Device(HttpContext ctx) => c.State.Authenticate(ctx.Request.Cookies[SessionCookie]);
-
-        // Every state-changing request: paired cookie + exact Origin + this device's CSRF token.
-        bool Authorized(HttpContext ctx, DeviceRecord? d) =>
-            d is not null && RequestProtection.SameOrigin(ctx) && c.Protection.ValidCsrf(ctx.Request.Headers["X-Abyss-CSRF"], d.Id);
+        DeviceRecord? Device(HttpContext ctx) => c.Device(ctx);
+        bool Authorized(HttpContext ctx, DeviceRecord? d) => c.Authorized(ctx, d);
 
         void DeleteCookie(HttpContext ctx) =>
             ctx.Response.Cookies.Delete(SessionCookie, new CookieOptions { Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/" });
@@ -191,6 +202,12 @@ public static class AbyssServer
             catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
             { return Results.Json(new { error = "The Windows clipboard is busy. Try again." }, statusCode: StatusCodes.Status503ServiceUnavailable); }
         });
+
+        // Feature modules: each maps its own endpoints and uses c.Device / c.Authorized.
+        Features.DisplayPreviewEndpoints.Map(app, c);
+        Features.FileTransferEndpoints.Map(app, c);
+        Features.HostActionEndpoints.Map(app, c);
+        Features.SteamEndpoints.Map(app, c);
 
         // Desktop mode video: JPEG frames, one in flight (see JpegStream).
         app.Map("/api/v1/stream", (HttpContext ctx) => RunSocketAsync(ctx, c, SocketKind.Video, async (live, device) =>
@@ -300,7 +317,7 @@ public static class AbyssServer
     /// <summary>The single gate for every WebSocket: paired cookie, exact Origin, and this
     /// device's CSRF token as the second requested subprotocol. Rejected requests get a
     /// plain HTTP 403 and never reach the desktop.</summary>
-    private static async Task RunSocketAsync(HttpContext ctx, ServerContext c, SocketKind kind, Func<LiveSocket, DeviceRecord, Task> body)
+    internal static async Task RunSocketAsync(HttpContext ctx, ServerContext c, SocketKind kind, Func<LiveSocket, DeviceRecord, Task> body)
     {
         if (!ctx.WebSockets.IsWebSocketRequest)
         {
@@ -339,7 +356,7 @@ public static class AbyssServer
     }
 
     /// <summary>Reads (and ignores) incoming messages until the browser closes the socket, then cancels.</summary>
-    private static async Task WaitForCloseAsync(LiveSocket live, CancellationTokenSource onClose)
+    internal static async Task WaitForCloseAsync(LiveSocket live, CancellationTokenSource onClose)
     {
         var buffer = new byte[256];
         try
@@ -350,7 +367,7 @@ public static class AbyssServer
         finally { onClose.Cancel(); }
     }
 
-    private static int QueryInt(HttpContext ctx, string key, int fallback, int min, int max) =>
+    internal static int QueryInt(HttpContext ctx, string key, int fallback, int min, int max) =>
         int.TryParse(ctx.Request.Query[key], out int value) ? Math.Clamp(value, min, max) : fallback;
 }
 
