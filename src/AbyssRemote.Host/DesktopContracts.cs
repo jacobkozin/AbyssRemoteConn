@@ -6,7 +6,12 @@ namespace AbyssRemote.Host;
 // implementations; the tests use fakes, so they can prove that nothing reaches the real
 // screen, keyboard or mouse without passing the security checks.
 
-public record DisplayInfo(int Id, string Name, int X, int Y, int Width, int Height, bool Primary);
+/// <summary>One monitor, in physical pixels. <paramref name="Name"/> is the Windows device name
+/// that capture uses (\\.\DISPLAY1). <paramref name="FriendlyName"/> is what a person would call
+/// it, normally the model the monitor reports ("DELL U2720Q"). <paramref name="RefreshHz"/> is 0
+/// when Windows does not say.</summary>
+public record DisplayInfo(int Id, string Name, int X, int Y, int Width, int Height, bool Primary,
+    string FriendlyName = "", int RefreshHz = 0);
 
 public interface IDesktop
 {

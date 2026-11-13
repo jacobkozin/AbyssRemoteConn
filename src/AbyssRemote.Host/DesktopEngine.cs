@@ -10,9 +10,20 @@ namespace AbyssRemote.Host;
 /// <summary>The real Windows desktop: GDI capture, SendInput and the clipboard.</summary>
 public sealed class DesktopEngine : IDesktop
 {
-    public IReadOnlyList<DisplayInfo> Displays() =>
-        Screen.AllScreens.Select((s, i) => new DisplayInfo(
-            i, s.DeviceName, s.Bounds.Left, s.Bounds.Top, s.Bounds.Width, s.Bounds.Height, s.Primary)).ToArray();
+    /// <summary>Numbering and geometry come from Screen.AllScreens alone. The model name and
+    /// refresh rate are looked up separately and only decorate that list, so a monitor Windows
+    /// cannot describe still appears, as "Monitor 2".</summary>
+    public IReadOnlyList<DisplayInfo> Displays()
+    {
+        var details = Features.MonitorCatalog.Current();
+        return Screen.AllScreens.Select((s, i) =>
+        {
+            details.TryGetValue(s.DeviceName, out var monitor);
+            string friendlyName = monitor is { FriendlyName.Length: > 0 } ? monitor.FriendlyName : $"Monitor {i + 1}";
+            return new DisplayInfo(i, s.DeviceName, s.Bounds.Left, s.Bounds.Top, s.Bounds.Width, s.Bounds.Height, s.Primary,
+                friendlyName, monitor?.RefreshHz ?? 0);
+        }).ToArray();
+    }
 
     public IFrameSource CreateFrameSource(int display, int maxWidth, int quality) =>
         new GdiFrameSource(this, display, maxWidth, quality);
@@ -61,7 +72,8 @@ public sealed unsafe class GdiFrameSource : IFrameSource
         _maxWidth = maxWidth;
         _jpegEncoder = ImageCodecInfo.GetImageEncoders().First(x => x.MimeType == "image/jpeg");
         _parameters = new EncoderParameters(1);
-        _parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)Math.Clamp(quality, 30, 90));
+        // Streams ask for at most 90. A screenshot that someone keeps asks for 95, where small text stays clean.
+        _parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)Math.Clamp(quality, 30, 95));
     }
 
     public byte[]? Capture(bool forceFullFrame)

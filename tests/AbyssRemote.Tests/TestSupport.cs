@@ -32,9 +32,19 @@ public sealed class FakeDesktop : IDesktop
     public IReadOnlyList<string> Commands { get { lock (_commands) return _commands.ToList(); } }
     public int SinksOpen => Volatile.Read(ref _sinksOpen);
 
-    public IReadOnlyList<DisplayInfo> Displays() => [new DisplayInfo(0, @"\\.\FAKE1", 0, 0, 1920, 1080, true)];
+    /// <summary>The monitors of this pretend PC. Tests may add or replace them.</summary>
+    public List<DisplayInfo> Monitors { get; } = [new DisplayInfo(0, @"\\.\FAKE1", 0, 0, 1920, 1080, true)];
 
-    public IFrameSource CreateFrameSource(int display, int maxWidth, int quality) => new Source(this);
+    /// <summary>What the latest frame source was created for.</summary>
+    public (int Display, int MaxWidth, int Quality)? LastFrameRequest { get; private set; }
+
+    public IReadOnlyList<DisplayInfo> Displays() => Monitors.ToArray();
+
+    public IFrameSource CreateFrameSource(int display, int maxWidth, int quality)
+    {
+        LastFrameRequest = (display, maxWidth, quality);
+        return new Source(this);
+    }
 
     public IInputSink CreateInputSink(Action<object> notify)
     {
