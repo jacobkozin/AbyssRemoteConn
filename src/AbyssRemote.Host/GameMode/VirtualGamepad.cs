@@ -60,7 +60,8 @@ internal sealed class ViGEmBus : IDisposable
     // CTL_CODE(FILE_DEVICE_BUS_EXTENDER 0x2A, function, METHOD_BUFFERED, FILE_WRITE_DATA)
     // = 0x2A << 16 | 2 << 14 | function << 2, with function = 0x801 + offset.
     public const uint IoctlPlugin = 0x2AA004, IoctlUnplug = 0x2AA008, IoctlCheckVersion = 0x2AA00C,
-        IoctlWaitDeviceReady = 0x2AA010, IoctlXusbSubmitReport = 0x2AA808;
+        IoctlWaitDeviceReady = 0x2AA010, IoctlXusbSubmitReport = 0x2AA808,
+        IoctlXusbNotification = 0x2AE804;
     private const uint CommonVersion = 0x0001;
     private const ushort MicrosoftVendor = 0x045E, Xbox360Product = 0x028E;
 
@@ -89,7 +90,7 @@ internal sealed class ViGEmBus : IDisposable
         string? path = InterfacePath();
         if (path is null) return (null, "Controllers need the free ViGEmBus driver on the PC (see README, \"Controllers\").");
         var handle = CreateFileW(path, 0xC0000000 /* GENERIC_READ | GENERIC_WRITE */, 0x3 /* share read/write */, IntPtr.Zero,
-            3 /* OPEN_EXISTING */, 0x80 /* FILE_ATTRIBUTE_NORMAL */, IntPtr.Zero);
+            3 /* OPEN_EXISTING */, 0x40000080 /* OVERLAPPED | NORMAL */, IntPtr.Zero);
         if (handle.IsInvalid) return (null, $"The ViGEmBus driver could not be opened (error {Marshal.GetLastWin32Error()}).");
         var bus = new ViGEmBus(handle);
         Span<uint> version = [8, CommonVersion]; // VIGEM_CHECK_VERSION { Size, Version }
@@ -146,11 +147,72 @@ internal sealed class ViGEmBus : IDisposable
         }
     }
 
-    private unsafe bool Control(uint code, ReadOnlySpan<byte> input)
+    // Overlapped operations let a pending rumble request coexist with input reports.
+    // Buffers remain pinned until Windows confirms completion, including cancellation.
+    private unsafe bool Control(uint code, ReadOnlySpan<byte> input) =>
+        Exchange(code, input, Span<byte>.Empty, null);
+
+    private unsafe bool Exchange(uint code, ReadOnlySpan<byte> input, Span<byte> output, WaitHandle? stop)
     {
-        fixed (byte* p = input)
-            return DeviceIoControl(_handle, code, p, (uint)input.Length, null, 0, out _, IntPtr.Zero);
+        using var done = new EventWaitHandle(false, EventResetMode.ManualReset);
+        NativeOverlapped operation = new() { EventHandle = done.SafeWaitHandle.DangerousGetHandle() };
+        fixed (byte* source = input)
+        fixed (byte* target = output)
+        {
+            if (DeviceIoControl(_handle, code, source, (uint)input.Length, target, (uint)output.Length,
+                    out _, (IntPtr)(&operation))) return true;
+            if (Marshal.GetLastWin32Error() != 997 /* ERROR_IO_PENDING */) return false;
+            bool cancelled = stop is null ? !done.WaitOne(5000) :
+                WaitHandle.WaitAny([stop, done]) == 0;
+            if (cancelled) CancelIoEx(_handle, (IntPtr)(&operation));
+            bool completed = GetOverlappedResult(_handle, (IntPtr)(&operation), out _, true);
+            return completed && !cancelled;
+        }
     }
+
+    internal static byte[] NotificationRequest(uint serial)
+    {
+        var bytes = new byte[12]; // Size, SerialNo, LargeMotor, SmallMotor, LedNumber, padding
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes, 12);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), serial);
+        return bytes;
+    }
+
+    public IDisposable WatchRumble(uint serial, Action<byte, byte> notify) =>
+        new RumbleSubscription(this, serial, notify);
+
+    private sealed class RumbleSubscription : IDisposable
+    {
+        private readonly ManualResetEvent _stop = new(false);
+        private readonly Thread _worker;
+        public RumbleSubscription(ViGEmBus bus, uint serial, Action<byte, byte> notify)
+        {
+            _worker = new Thread(() =>
+            {
+                var request = NotificationRequest(serial);
+                var response = new byte[12];
+                while (!_stop.WaitOne(0) && bus.Exchange(IoctlXusbNotification, request, response, _stop))
+                {
+                    if (_stop.WaitOne(0)) break;
+                    notify(response[8], response[9]);
+                    // Avoid flooding the socket if a game updates vibration every frame.
+                    if (_stop.WaitOne(16)) break;
+                }
+            }) { IsBackground = true, Name = "Abyss Remote controller feedback" };
+            _worker.Start();
+        }
+        public void Dispose()
+        {
+            _stop.Set();
+            _worker.Join(); // Exchange cancels and drains its pending request before returning.
+            _stop.Dispose();
+        }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CancelIoEx(SafeFileHandle handle, IntPtr operation);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetOverlappedResult(SafeFileHandle handle, IntPtr operation, out uint bytes, bool wait);
 
     private static string? InterfacePath()
     {
@@ -184,6 +246,7 @@ internal sealed class GamepadSet : IDisposable
 {
     public const int MaxPads = 4;
     private readonly Dictionary<int, uint> _pads = new();
+    private readonly List<IDisposable> _feedback = new();
     private readonly Action<object> _notify;
     private bool _reported;
 
@@ -208,6 +271,8 @@ internal sealed class GamepadSet : IDisposable
                 return;
             }
             _pads[index] = serial = plugged;
+            _feedback.Add(bus.WatchRumble(serial, (large, small) =>
+                _notify(new { type = "rumble", index, strong = large / 255.0, weak = small / 255.0 })));
         }
         bus.Submit(serial, XusbReport.FromBrowser(command));
     }
@@ -221,6 +286,8 @@ internal sealed class GamepadSet : IDisposable
 
     public void Dispose()
     {
+        foreach (var subscription in _feedback) subscription.Dispose();
+        _feedback.Clear();
         if (ViGEmBus.Shared.Bus is { } bus)
             foreach (uint serial in _pads.Values) bus.Unplug(serial);
         _pads.Clear();

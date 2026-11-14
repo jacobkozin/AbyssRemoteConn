@@ -106,6 +106,8 @@ public sealed class FakeVideoSource : IVideoSource
 
     public long FramesProduced { get { lock (_sync) return _frames; } }
     public int KeyframeRequests { get; private set; }
+    public System.Collections.Concurrent.ConcurrentQueue<int> BitrateRequests { get; } = new();
+    public void RequestBitrate(int kbps) => BitrateRequests.Enqueue(kbps);
     public bool Disposed { get; private set; }
 
     public System.Threading.Channels.ChannelReader<VideoEvent> Events => _events.Reader;

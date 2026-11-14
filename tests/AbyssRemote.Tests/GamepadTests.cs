@@ -48,6 +48,14 @@ public sealed class GamepadTests
     public void ReportMatchesTheDriversTwelveByteLayout() => Assert.AreEqual(12, Unsafe.SizeOf<XusbReport>());
 
     [TestMethod]
+    public void FeedbackRequestHasTheDriverLayout()
+    {
+        CollectionAssert.AreEqual(new byte[] { 12,0,0,0, 4,3,2,1, 0,0,0,0 },
+            ViGEmBus.NotificationRequest(0x01020304));
+        Assert.AreEqual((0x2Au << 16) | (3u << 14) | (0xA01u << 2), ViGEmBus.IoctlXusbNotification);
+    }
+
+    [TestMethod]
     public void IoctlCodesMatchTheDriverHeader()
     {
         // CTL_CODE(FILE_DEVICE_BUS_EXTENDER, IOCTL_VIGEM_BASE + n, METHOD_BUFFERED, FILE_WRITE_DATA)

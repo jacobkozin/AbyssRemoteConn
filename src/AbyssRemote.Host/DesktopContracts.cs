@@ -70,6 +70,9 @@ public interface IVideoSource : IDisposable
 
     /// <summary>Make the next frame a keyframe (new decoder, or a decode error).</summary>
     void RequestKeyframe();
+
+    /// <summary>Queue a bounded bitrate change; unsupported sources keep their current rate.</summary>
+    void RequestBitrate(int kbps) { }
 }
 
 public interface IFrameSource : IDisposable

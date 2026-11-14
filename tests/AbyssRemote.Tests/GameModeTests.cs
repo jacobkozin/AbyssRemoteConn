@@ -70,6 +70,23 @@ public sealed class GameModeProtocolTests
     }
 
     [TestMethod]
+    public async Task BitrateChangesAreBoundedAndRateLimitedWithoutGrantingFrames()
+    {
+        using var client = await _server.PairAsync();
+        using var socket = await client.ConnectAsync("/api/v1/video");
+        await NextAsync(socket); await NextAsync(socket); await NextAsync(socket);
+        await socket.SendTextAsync("bitrate 12000");
+        await Wait.UntilAsync(() => !_server.Desktop.LastVideo!.BitrateRequests.IsEmpty);
+        await socket.SendTextAsync("bitrate 8000");
+        await socket.SendTextAsync("key"); // ordered receive barrier
+        await Wait.UntilAsync(() => _server.Desktop.LastVideo!.KeyframeRequests == 1);
+        CollectionAssert.AreEqual(new[] { 12000 }, _server.Desktop.LastVideo!.BitrateRequests.ToArray());
+        Assert.AreEqual(2L, _server.Desktop.LastVideo.FramesProduced);
+        await socket.SendTextAsync("bitrate 50001");
+        await Wait.UntilAsync(() => _server.Desktop.LastVideo.Disposed);
+    }
+
+    [TestMethod]
     public async Task VideoSocketHasTheSameSecurityGate()
     {
         using var client = await _server.PairAsync();

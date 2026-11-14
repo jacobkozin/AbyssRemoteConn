@@ -24,6 +24,7 @@ internal sealed class GpuVideoSource : IVideoSource
     private HardwareEncoder? _encoder;
     private volatile bool _stopping, _keyframeRequested = true;
     private bool _configSent;
+    private int _pendingBitrate;
     private (int X, int Y, bool Visible) _lastCursor = (-1, -1, false);
 
     /// <param name="repeatStaticFrames">Diagnostics only: keep encoding even when nothing changes.</param>
@@ -61,6 +62,8 @@ internal sealed class GpuVideoSource : IVideoSource
     }
 
     public void RequestKeyframe() => _keyframeRequested = true;
+
+    public void RequestBitrate(int kbps) => Interlocked.Exchange(ref _pendingBitrate, Math.Clamp(kbps, 2000, 50000));
 
     private void CaptureLoop()
     {
@@ -133,6 +136,9 @@ internal sealed class GpuVideoSource : IVideoSource
                 // Keep a steady cadence; after an idle period start fresh instead of bursting.
                 var now = _clock.Elapsed;
                 nextFrameAt = nextFrameAt + interval > now ? nextFrameAt + interval : now;
+                int requestedBitrate = Interlocked.Exchange(ref _pendingBitrate, 0);
+                if (requestedBitrate != 0 && !_encoder!.TrySetBitrate(requestedBitrate))
+                    _events.Writer.TryWrite(new VideoStatus("bitrateUnsupported", "This encoder cannot change bitrate while streaming. Choose a fixed bitrate."));
                 IntPtr nv12 = _converter!.Convert();
                 bool keyframe = _keyframeRequested;
                 _keyframeRequested = false;

@@ -7,6 +7,8 @@
 // browser has decoded each one, so a slow device or a Wi-Fi hiccup can never build a backlog.
 // Same callbacks as jpeg-stream.js, plus onConfig, onCursor, onCursorImage and onStats.
 
+import { adaptiveBitrate } from './adaptive-bitrate.js';
+
 const PROBE_CODEC = 'avc1.64002a'; // H.264 High profile, level 4.2 (1080p at 60 fps)
 
 export async function gameModeSupported() {
@@ -19,10 +21,12 @@ export async function gameModeSupported() {
   }
 }
 
-export function startVideoStream({ url, protocols, onFrame, onStatus, onClose, onConfig, onCursor, onCursorImage, onStats }) {
+export function startVideoStream({ url, protocols, onFrame, onStatus, onClose, onConfig, onCursor, onCursorImage, onStats, automaticBitrate = false }) {
   const socket = new WebSocket(url, protocols);
   socket.binaryType = 'arraybuffer';
   let stopped = false, decoder = null, config = null, needKeyframe = true;
+  const adaptation = adaptiveBitrate();
+  let adapt = automaticBitrate;
   const inDecoder = new Set(); // frame ids handed to the decoder that have not come out yet
 
   const send = (text) => { if (!stopped && socket.readyState === WebSocket.OPEN) socket.send(text); };
@@ -67,7 +71,11 @@ export function startVideoStream({ url, protocols, onFrame, onStatus, onClose, o
           break;
         case 'cursor': onCursor?.(message); break;
         case 'cursorImage': onCursorImage?.(message); break;
-        case 'stats': onStats?.(message); break;
+        case 'stats': {
+          if (adapt) { const rate = adaptation.sample(message); if (rate !== null) send('bitrate ' + rate); }
+          onStats?.(message); break;
+        }
+        case 'bitrateUnsupported': adapt = false; onStatus({ type: 'error', message: message.message }); break;
         default: onStatus(message); // unavailable, resumed, restart, error
       }
       return;

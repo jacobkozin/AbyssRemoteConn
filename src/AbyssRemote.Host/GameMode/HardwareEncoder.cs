@@ -194,6 +194,9 @@ internal sealed unsafe class HardwareEncoder : IDisposable
         finally { Com.Release(ref type); }
     }
 
+    public bool TrySetBitrate(int kbps) => _codecApi != IntPtr.Zero &&
+        Mf.SetCodecValue(_codecApi, CodecApiGuids.MeanBitRate, Variant.FromUInt32((uint)Math.Clamp(kbps, 2000, 50000) * 1000)) >= 0;
+
     private void SetCodec(in Guid api, Variant value)
     {
         if (_codecApi != IntPtr.Zero) Mf.SetCodecValue(_codecApi, api, value);

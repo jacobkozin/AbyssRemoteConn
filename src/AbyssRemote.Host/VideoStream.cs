@@ -77,6 +77,7 @@ public static class VideoStream
     private static async Task ReceiveAsync(LiveSocket live, IVideoSource source, ConcurrentDictionary<long, long> sentAt, Stats stats, CancellationTokenSource stop)
     {
         var buffer = new byte[64];
+        long lastBitrateChange = 0;
         try
         {
             while (live.Socket.State == WebSocketState.Open && !stop.IsCancellationRequested)
@@ -96,6 +97,16 @@ public static class VideoStream
                     {
                         stats.RoundTrip(Stopwatch.GetElapsedTime(sent).TotalMilliseconds);
                         source.AllowFrames(1);
+                    }
+                }
+                else if (text.StartsWith("bitrate ", StringComparison.Ordinal) &&
+                    int.TryParse(text.AsSpan(8), out int kbps) && kbps >= 2000 && kbps <= 50000)
+                {
+                    // Bound both the value and update frequency on the authenticated socket.
+                    if (lastBitrateChange == 0 || Stopwatch.GetElapsedTime(lastBitrateChange).TotalSeconds >= 1)
+                    {
+                        lastBitrateChange = Stopwatch.GetTimestamp();
+                        source.RequestBitrate(kbps);
                     }
                 }
                 else return; // unknown message: end the stream
