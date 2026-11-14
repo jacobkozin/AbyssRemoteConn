@@ -10,6 +10,14 @@ namespace AbyssRemote.Host.App;
 /// reports changes from its own threads; everything here runs on the window's thread.</summary>
 internal sealed class WindowApp : IWindowActions
 {
+    /// <summary>What the app takes from the PC. The program uses <see cref="ForThisPc"/>; a test
+    /// passes a temporary folder, throwaway certificates, a fake registry and no tray icon.</summary>
+    internal sealed record WindowAppSetup(HostEnvironment Environment, string SettingsDirectory, IRunKey RunKey, bool ShowTrayIcon)
+    {
+        public static WindowAppSetup ForThisPc() =>
+            new(HostEnvironment.ForThisPc(consoleLogging: false), AppInfo.DataDirectory, new WindowsRunKey(), ShowTrayIcon: true);
+    }
+
     private readonly SynchronizationContext _windowThread;
     private readonly HostRuntime _runtime;
     private readonly PreferencesFile _preferencesFile;
@@ -52,7 +60,7 @@ internal sealed class WindowApp : IWindowActions
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
 
-        var app = new WindowApp(commandLine);
+        var app = new WindowApp(commandLine, WindowAppSetup.ForThisPc());
         // A mistake in the window must not take the server down with it: note it and carry on.
         Application.ThreadException += (_, e) => app._runtime.AddNotice($"Something went wrong in the window: {e.Exception.Message}");
         instance.Listen(() => app.OnWindowThread(app._window.ShowInFront));
@@ -60,14 +68,15 @@ internal sealed class WindowApp : IWindowActions
         Application.Run(); // returns after Quit
     }
 
-    private WindowApp(LaunchOptions commandLine)
+    /// <summary>Must be created on the thread that then runs the message loop.</summary>
+    internal WindowApp(LaunchOptions commandLine, WindowAppSetup setup)
     {
         _windowThread = SynchronizationContext.Current!;
-        _preferencesFile = new PreferencesFile(AppInfo.DataDirectory);
+        _preferencesFile = new PreferencesFile(setup.SettingsDirectory);
         _preferences = _preferencesFile.Load(out string? settingsNotice);
         _options = HostRunOptions.From(commandLine, _preferences);
-        _runtime = new HostRuntime(HostEnvironment.ForThisPc(consoleLogging: false));
-        _autostart = new Autostart(new WindowsRunKey(), AppInfo.ExecutablePath);
+        _runtime = new HostRuntime(setup.Environment);
+        _autostart = new Autostart(setup.RunKey, AppInfo.ExecutablePath);
         _startWithWindows = ReadAutostart();
 
         _window = new MainWindow(this) { CloseToTray = _preferences.CloseToTray };
@@ -78,7 +87,7 @@ internal sealed class WindowApp : IWindowActions
             _windowClosed = true;
             Quit();
         };
-        _tray = new TrayIcon(ToggleWindow, _window.ShowInFront, CopyAddress, NewCodeFromTray, RevokeAllDevices, Quit);
+        _tray = new TrayIcon(ToggleWindow, _window.ShowInFront, CopyAddress, NewCodeFromTray, RevokeAllDevices, Quit, setup.ShowTrayIcon);
 
         _runtime.StatusChanged += () => OnWindowThread(OnStatusChanged);
         _runtime.NoticeAdded += _ => OnWindowThread(Refresh);
@@ -91,7 +100,13 @@ internal sealed class WindowApp : IWindowActions
         if (settingsNotice is not null) _runtime.AddNotice(settingsNotice);
     }
 
-    private async void Start(bool startHidden)
+    /// <summary>The server underneath, for whoever needs to watch it.</summary>
+    internal HostRuntime Runtime => _runtime;
+
+    /// <summary>Quits as the tray menu's "Quit" does; may be called from any thread.</summary>
+    internal void RequestQuit() => OnWindowThread(Quit);
+
+    internal async void Start(bool startHidden)
     {
         Refresh();
         _clock.Start();

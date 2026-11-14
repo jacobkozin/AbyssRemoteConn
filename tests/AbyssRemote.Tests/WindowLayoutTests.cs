@@ -1,3 +1,7 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using AbyssRemote.Host;
 using AbyssRemote.Host.App;
 
 namespace AbyssRemote.Tests;
@@ -96,6 +100,127 @@ public sealed class WindowLayoutTests
         }
         finally { Directory.Delete(folder, recursive: true); }
     }
+
+    [TestMethod]
+    public void TheCloseButtonHidesToTheTrayButACloseRequestFromOutsideCloses() => OnWindowThread(() =>
+    {
+        using var window = new MainWindow(new Ignore());
+        int hidden = 0, closed = 0;
+        window.HiddenToTray += () => hidden++;
+        window.FormClosed += (_, _) => closed++;
+        IntPtr handle = window.Handle; // the window exists but is never shown
+
+        SendMessageW(handle, SystemCommand, CloseCommand, 0); // what the X button and Alt+F4 send
+        Assert.AreEqual((1, 0), (hidden, closed));
+        Assert.IsFalse(window.IsDisposed);
+
+        // The "End task" button of Task Manager asks with a plain close message. It must work
+        // even right after a close that was turned into "hide".
+        SendMessageW(handle, CloseMessage, 0, 0);
+        Assert.AreEqual((1, 1), (hidden, closed));
+        Assert.IsTrue(window.IsDisposed);
+    });
+
+    [TestMethod]
+    public void WithoutCloseToTrayTheCloseButtonCloses() => OnWindowThread(() =>
+    {
+        using var window = new MainWindow(new Ignore()) { CloseToTray = false };
+        int hidden = 0, closed = 0;
+        window.HiddenToTray += () => hidden++;
+        window.FormClosed += (_, _) => closed++;
+
+        SendMessageW(window.Handle, SystemCommand, CloseCommand, 0);
+
+        Assert.AreEqual((0, 1), (hidden, closed));
+    });
+
+    [TestMethod]
+    public void QuittingClosesTheWindowEvenWithCloseToTray() => OnWindowThread(() =>
+    {
+        using var window = new MainWindow(new Ignore());
+        int closed = 0;
+        window.FormClosed += (_, _) => closed++;
+        IntPtr handle = window.Handle;
+
+        window.Quitting = true;
+        SendMessageW(handle, SystemCommand, CloseCommand, 0);
+
+        Assert.AreEqual(1, closed);
+    });
+
+    /// <summary>The whole windowed app, started the way "Start with Windows" starts it (hidden,
+    /// so nothing appears on screen), with a temporary folder, throwaway certificates, a fake
+    /// registry and no tray icon. Then it is told to quit, as the tray menu would.</summary>
+    [TestMethod]
+    public async Task TheAppStartsHiddenServesAndQuitsCleanly()
+    {
+        string folder = Directory.CreateTempSubdirectory("abyss-window-app-test-").FullName;
+        int port = FreePort();
+        var runKey = new FakeRunKey();
+        var created = new TaskCompletionSource<WindowApp>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, threadScope: true);
+                SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+                var environment = TestRuntime.Environment(folder, new ThrowawayCertificates(), new FakeDesktop());
+                var app = new WindowApp(LaunchOptions.Parse(["--port", port.ToString(), "--minimized"]),
+                    new WindowApp.WindowAppSetup(environment, folder, runKey, ShowTrayIcon: false));
+                app.Start(startHidden: true);
+                created.SetResult(app);
+                Application.Run(); // returns when the app quits
+            }
+            catch (Exception ex) { created.TrySetException(ex); }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        try
+        {
+            var app = await created.Task;
+            await Wait.UntilAsync(() => app.Runtime.Status.Phase == HostPhase.Running, timeoutMs: 20_000);
+            Assert.AreEqual(port, app.Runtime.Status.Running!.Port);
+            Assert.AreEqual(PairingCodeState.None, app.Runtime.PairingCode.State, "a hidden start makes no pairing code");
+            Assert.IsTrue(CanConnect(port));
+
+            app.RequestQuit();
+
+            Assert.IsTrue(thread.Join(TimeSpan.FromSeconds(20)), "the window thread ends after Quit");
+            Assert.AreEqual(HostPhase.Stopped, app.Runtime.Status.Phase);
+            Assert.IsFalse(CanConnect(port), "the server is gone");
+            Assert.IsFalse(File.Exists(Path.Combine(folder, PreferencesFile.FileName)), "nothing is saved until a setting changes");
+            Assert.AreEqual(0, runKey.Writes, "the Run key is only written when the box is ticked");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    private static int FreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    private static bool CanConnect(int port)
+    {
+        using var client = new TcpClient();
+        try
+        {
+            client.Connect(IPAddress.Loopback, port);
+            return true;
+        }
+        catch (SocketException) { return false; }
+    }
+
+    private const uint SystemCommand = 0x0112, CloseMessage = 0x0010; // WM_SYSCOMMAND, WM_CLOSE
+    private const nint CloseCommand = 0xF060;                         // SC_CLOSE
+
+    [DllImport("user32.dll")] private static extern nint SendMessageW(IntPtr window, uint message, nint wParam, nint lParam);
 
     [TestMethod]
     public void TimesAreSaidInWords()

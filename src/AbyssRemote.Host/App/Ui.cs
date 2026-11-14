@@ -155,9 +155,21 @@ internal static class WindowNative
 
     public static void BringToFront(IntPtr window) => SetForegroundWindow(window);
 
+    /// <summary>The scale (1 = 100%) of the monitor that shows a point of the desktop. Lets the
+    /// window pick the right size for a monitor before it has been shown there.</summary>
+    public static float ScaleAt(Point desktopPoint)
+    {
+        IntPtr monitor = MonitorFromPoint(desktopPoint, NearestMonitor);
+        return GetDpiForMonitor(monitor, EffectiveDpi, out uint dpi, out _) == 0 ? dpi / 96f : 1f;
+    }
+
     private const int UseImmersiveDarkMode = 20; // DWMWA_USE_IMMERSIVE_DARK_MODE
+    private const uint NearestMonitor = 2;       // MONITOR_DEFAULTTONEAREST
+    private const int EffectiveDpi = 0;          // MDT_EFFECTIVE_DPI
 
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] private static extern int SetWindowTheme(IntPtr window, string? application, string? idList);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromPoint(Point point, uint flags);
+    [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int kind, out uint dpiX, out uint dpiY);
 }

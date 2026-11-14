@@ -161,7 +161,7 @@ internal sealed class MainView : Control
 internal sealed class MainWindow : Form
 {
     private static readonly Size StartSize = new(1100, 940), SmallestSize = new(600, 480); // logical pixels
-    private bool _placed;
+    private bool _placed, _closeButtonUsed;
 
     public MainWindow(IWindowActions actions)
     {
@@ -209,16 +209,29 @@ internal sealed class MainWindow : Form
         ApplyMonitorScale();
     }
 
+    protected override void WndProc(ref Message m)
+    {
+        // The close button and Alt+F4 arrive as this system command. Only they hide the window
+        // to the tray; a close request from outside (Task Manager's "End task", Windows shutting
+        // down) must really close it. Windows Forms' own CloseReason cannot tell them apart
+        // reliably: it still says "user" after a close that was cancelled.
+        if (m.Msg == SystemCommand && ((int)m.WParam & 0xFFF0) == CloseCommand) _closeButtonUsed = true;
+        base.WndProc(ref m);
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (e.CloseReason == CloseReason.UserClosing && CloseToTray && !Quitting)
+        if (_closeButtonUsed && CloseToTray && !Quitting)
         {
             e.Cancel = true;
             Hide();
             HiddenToTray?.Invoke();
         }
+        _closeButtonUsed = false;
         base.OnFormClosing(e);
     }
+
+    private const int SystemCommand = 0x0112, CloseCommand = 0xF060; // WM_SYSCOMMAND, SC_CLOSE
 
     private void ApplyMonitorScale()
     {
@@ -232,10 +245,10 @@ internal sealed class MainWindow : Form
     private void PlaceOnScreen()
     {
         _placed = true;
-        var area = Screen.FromPoint(Cursor.Position).WorkingArea;
-        // Moving to that monitor first makes Windows report its scale (see OnDpiChanged).
-        Location = area.Location;
-        var wanted = SizeFromClientSize(Scaled(StartSize, DeviceDpi / 96f));
+        var pointer = Cursor.Position;
+        var area = Screen.FromPoint(pointer).WorkingArea;
+        // That monitor's scale, not this window's: the window has not been there yet.
+        var wanted = SizeFromClientSize(Scaled(StartSize, WindowNative.ScaleAt(pointer)));
         var size = new Size(Math.Min(wanted.Width, area.Width * 94 / 100), Math.Min(wanted.Height, area.Height * 94 / 100));
         Bounds = new Rectangle(area.X + (area.Width - size.Width) / 2, area.Y + (area.Height - size.Height) / 2, size.Width, size.Height);
     }

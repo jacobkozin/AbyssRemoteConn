@@ -55,21 +55,26 @@ public sealed class TestRuntime : IAsyncDisposable
     public HostRuntime Runtime { get; }
     public IReadOnlyList<string> Events { get { lock (_events) return _events.ToList(); } }
 
+    /// <summary>An environment in which nothing reaches the real PC: its files live in
+    /// <paramref name="dataDirectory"/>, the certificates are throwaway and the desktop is a fake.</summary>
+    public static HostEnvironment Environment(string dataDirectory, ICertificateSource certificates, IDesktop desktop,
+        TimeProvider? clock = null, string? webRoot = null) => new()
+    {
+        DataDirectory = dataDirectory,
+        WebRoot = webRoot ?? FindWebRoot(),
+        Certificates = certificates,
+        Desktop = desktop,
+        Clipboard = new FakeClipboard(),
+        Transfer = new TransferFolder(Path.Combine(dataDirectory, "transfer")),
+        Actions = new FakeHostActions(),
+        Steam = new FakeSteam(),
+        NetworkAddresses = () => [],
+        Clock = clock ?? TimeProvider.System,
+    };
+
     public TestRuntime(TimeProvider? clock = null, string? webRoot = null)
     {
-        Runtime = new HostRuntime(new HostEnvironment
-        {
-            DataDirectory = DataDirectory,
-            WebRoot = webRoot ?? FindWebRoot(),
-            Certificates = Certificates,
-            Desktop = Desktop,
-            Clipboard = new FakeClipboard(),
-            Transfer = new TransferFolder(Path.Combine(DataDirectory, "transfer")),
-            Actions = new FakeHostActions(),
-            Steam = new FakeSteam(),
-            NetworkAddresses = () => [],
-            Clock = clock ?? TimeProvider.System,
-        });
+        Runtime = new HostRuntime(Environment(DataDirectory, Certificates, Desktop, clock, webRoot));
         Runtime.StatusChanged += () => Record("status:" + Runtime.Status.Phase);
         Runtime.NoticeAdded += line => Record("notice:" + line.Message);
         Runtime.PairingCodeChanged += () => Record("code:" + Runtime.PairingCode.State);
