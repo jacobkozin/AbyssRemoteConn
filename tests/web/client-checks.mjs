@@ -13,7 +13,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const web = path.join(root, 'src', 'AbyssRemote.Host', 'wwwroot');
 const read = (file) => fs.readFileSync(path.join(web, file), 'utf8');
 const html = read('index.html');
-const css = read('style.css');
+const styles = fs.readdirSync(web).filter((f) => f.endsWith('.css'));
+const css = styles.map(read).join('\n');
 const scripts = fs.readdirSync(web).filter((f) => f.endsWith('.js'));
 const source = Object.fromEntries(scripts.map((f) => [f, read(f)]));
 const allJs = Object.values(source).join('\n');
@@ -49,6 +50,17 @@ check('every element id used by the scripts exists in index.html', () => {
   assert.deepEqual(missing, []);
 });
 
+check('every icon that is used is drawn in index.html, and none is drawn for nothing', () => {
+  const drawn = [...html.matchAll(/<symbol id="i-([\w-]+)"/g)].map((m) => m[1]);
+  const used = new Set([
+    ...html.matchAll(/<use href="#i-([\w-]+)"/g),
+    ...allJs.matchAll(/\bicon\(['"]([\w-]+)['"]\)/g),
+    ...allJs.matchAll(/\bicon: ['"]([\w-]+)['"]/g),
+  ].map((m) => m[1]));
+  assert.deepEqual([...used].filter((name) => !drawn.includes(name)), [], 'used but not drawn');
+  assert.deepEqual(drawn.filter((name) => !used.has(name)), [], 'drawn but not used');
+});
+
 check('no inline scripts, inline styles or inline handlers (the CSP would block them)', () => {
   assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/i, 'inline <script>');
   assert.doesNotMatch(html, /\sstyle=["']/i, 'style="" attribute');
@@ -63,7 +75,7 @@ check('index.html cache-busting matches the project version', () => {
   const project = fs.readFileSync(path.join(root, 'src', 'AbyssRemote.Host', 'AbyssRemote.Host.csproj'), 'utf8');
   const version = project.match(/<Version>([^<]+)<\/Version>/)[1];
   assert.match(html, new RegExp(`app\\.js\\?v=${version.replace(/\./g, '\\.')}"`));
-  assert.match(html, new RegExp(`style\\.css\\?v=${version.replace(/\./g, '\\.')}"`));
+  for (const file of styles) assert.match(html, new RegExp(`href="/${file.replace(/\./g, '\\.')}\\?v=${version.replace(/\./g, '\\.')}"`), `${file} is not linked with the version`);
   assert.match(html, new RegExp(`<footer>[^<]*<span>${version.replace(/\./g, '\\.')}</span>`));
 });
 

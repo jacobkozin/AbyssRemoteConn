@@ -29,6 +29,10 @@ public sealed class FakeDesktop : IDesktop
     /// <summary>What Capture returns (argument: forceFullFrame). Default: a frame every time.</summary>
     public Func<bool, byte[]?> OnCapture { get; set; } = _ => FakeJpeg;
 
+    /// <summary>When set, this is asked instead of OnCapture and also learns which monitor is
+    /// wanted and how wide the picture may be (arguments: monitor, widest picture, forceFullFrame).</summary>
+    public Func<int, int, bool, byte[]?>? OnCaptureMonitor { get; set; }
+
     public IReadOnlyList<string> Commands { get { lock (_commands) return _commands.ToList(); } }
     public int SinksOpen => Volatile.Read(ref _sinksOpen);
 
@@ -43,7 +47,7 @@ public sealed class FakeDesktop : IDesktop
     public IFrameSource CreateFrameSource(int display, int maxWidth, int quality)
     {
         LastFrameRequest = (display, maxWidth, quality);
-        return new Source(this);
+        return new Source(this, display, maxWidth);
     }
 
     public IInputSink CreateInputSink(Action<object> notify)
@@ -76,9 +80,11 @@ public sealed class FakeDesktop : IDesktop
         return source;
     }
 
-    private sealed class Source(FakeDesktop owner) : IFrameSource
+    private sealed class Source(FakeDesktop owner, int display, int maxWidth) : IFrameSource
     {
-        public byte[]? Capture(bool forceFullFrame) => owner.OnCapture(forceFullFrame);
+        public byte[]? Capture(bool forceFullFrame) => owner.OnCaptureMonitor is { } perMonitor
+            ? perMonitor(display, maxWidth, forceFullFrame)
+            : owner.OnCapture(forceFullFrame);
         public void Dispose() { }
     }
 

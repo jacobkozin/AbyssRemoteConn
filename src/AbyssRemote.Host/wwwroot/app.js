@@ -1,4 +1,5 @@
-// Abyss Remote browser client: pairing, the remote session, and mouse/touch/keyboard input.
+// Abyss Remote browser client: the stream view (video, sound, mouse/touch/keyboard input) and
+// the switching between the three screens: pairing (pairing.js), home (home.js) and stream.
 // Video comes from one of two stream modules with the same callbacks: jpeg-stream.js (Desktop
 // mode) or video-stream.js (Game mode, hardware H.264 + WebCodecs). Input goes over one
 // authenticated WebSocket as small JSON messages (see docs/API.md). No third-party code.
@@ -6,18 +7,30 @@ import { startJpegStream } from './jpeg-stream.js';
 import { startVideoStream, gameModeSupported } from './video-stream.js';
 import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
 import { watchGamepads } from './gamepad.js';
+import { api, fetchFile, refreshIdentity, session } from './api.js';
+import { $, el, icon, saveBlob } from './dom.js';
+import { fileNameFromDisposition } from './format.js';
+import { initPairing, clearPairCode } from './pairing.js';
+import { initHome, showHomeScreen, hideHomeScreen } from './home.js';
+import { createMonitorPicker, monitorLabel, pickMonitor } from './monitors.js';
 
-const $ = (id) => document.getElementById(id);
 const desktop = $('desktop');
 const canvasContext = desktop.getContext('2d', { alpha: false, desynchronized: true });
 const PROTOCOL = 'abyss-v1';
 const CLOSE_REVOKED = 4001, CLOSE_REPLACED = 4008, CLOSE_BUSY = 4029, CLOSE_UNSUPPORTED = 4415;
 const SETTINGS_KEY = 'abyss-remote:settings';
+const STREAMING_KEY = 'abyss-remote:streaming';
+const UNPAIRED = 'This device is no longer paired. Pair it again with a new code.';
+const WATCHING = 'Watch only is on. Turn it off to control the PC.';
 
+// `active` means the stream view is on screen. `display` is the number of the monitor being
+// shown; `displayName` is the Windows device name of the monitor the user chose, which is
+// what gets remembered (numbers change when monitors are plugged in or rearranged).
+// `watchOnly` stops every kind of input from being sent.
 const state = {
-  csrf: null, myId: null, active: false, stopped: false, features: {},
+  active: false, stopped: false, watchOnly: false, monitorsOpen: false,
   mode: 'desktop', gameAvailable: false, fallbackNotice: '', soundOn: false, audio: null,
-  displays: [], display: 0, preferredDisplay: null,
+  displays: [], display: 0, displayName: null,
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
   zoom: 100, frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
   desktopWidth: 0, desktopHeight: 0,
@@ -38,7 +51,16 @@ function showOverlay(message) {
   $('screenOverlay').classList.remove('hidden');
 }
 function hideOverlay() { $('screenOverlay').classList.add('hidden'); }
-function showError(message) { $('remoteError').textContent = message; }
+// Messages go on the line under the stage. Phones hide that line (the stream fills the
+// screen), so the same text also appears over the picture for a few seconds.
+let noteTimer = 0;
+function showError(message) {
+  $('remoteError').textContent = message;
+  $('stageNote').textContent = message;
+  $('stageNote').classList.toggle('hidden', !message);
+  clearTimeout(noteTimer);
+  if (message) noteTimer = setTimeout(() => $('stageNote').classList.add('hidden'), 6000);
+}
 
 // Viewer preferences live in this browser only (never secrets). Private browsing may block
 // storage; the app then simply starts with defaults.
@@ -46,8 +68,8 @@ function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
 }
 function saveSettings() {
-  const data = { display: state.display, mode: $('modePick').value, fps: $('fpsPick').value,
-                 fit: state.fitUserSet ? $('fitPick').value : undefined, streamMode: state.mode, sound: state.soundOn,
+  const data = { displayName: state.displayName, mode: $('modePick').value, fps: $('fpsPick').value,
+                 fit: state.fitUserSet ? $('fitPick').value : undefined, streamMode: state.mode, sound: state.soundOn, watchOnly: state.watchOnly,
                  gameHeight: $('gameHeightPick').value, gameFps: $('gameFpsPick').value, bitrate: $('bitratePick').value };
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); } catch { /* not remembered */ }
 }
@@ -62,28 +84,57 @@ function applySettings(saved) {
   pick('gameFpsPick', saved.gameFps);
   pick('bitratePick', saved.bitrate);
   if (pick('fitPick', saved.fit)) state.fitUserSet = true;
-  if (Number.isInteger(saved.display)) state.preferredDisplay = saved.display;
+  if (typeof saved.displayName === 'string') state.displayName = saved.displayName;
   if (saved.streamMode === 'game') state.mode = 'game'; // confirmed once we know the PC and browser support it
   state.soundOn = saved.sound === true; // still needs a tap after each page load before audio may play
+  state.watchOnly = saved.watchOnly === true; // remembered, so "only watching" never silently turns into control
 }
 
 // ---------------------------------------------------------------- views
 
-function showPair(error = '') {
+const views = { pair: $('pairView'), home: $('homeView'), remote: $('remoteView') };
+function showView(name) {
+  for (const [key, view] of Object.entries(views)) view.classList.toggle('hidden', key !== name);
+}
+
+// A reload (or iOS throwing the page away in the background) should come back to the stream
+// that was open, not to the home screen. Kept per tab, and only while a stream is showing.
+function rememberStreaming(on) {
+  try { if (on) sessionStorage.setItem(STREAMING_KEY, '1'); else sessionStorage.removeItem(STREAMING_KEY); } catch { /* not remembered */ }
+}
+function wasStreaming() {
+  try { return sessionStorage.getItem(STREAMING_KEY) === '1'; } catch { return false; }
+}
+
+// Ends the stream view: closes its sockets and puts away everything that belongs to it.
+function leaveStream() {
   state.active = false;
   closeConnections();
-  $('pairView').classList.remove('hidden');
-  $('remoteView').classList.add('hidden');
+  if (document.pointerLockElement) document.exitPointerLock();
   if (state.immersive) setImmersive(false);
   if (state.keyboardOpen) setKeyboard(false);
-  $('signOut').classList.add('hidden');
+  if (state.monitorsOpen) setMonitorSheet(false);
+  canvasContext.clearRect(0, 0, desktop.width, desktop.height); // the next stream must not start with this one's last picture
+  rememberStreaming(false);
+}
+function showPair(error = '') {
+  leaveStream();
+  hideHomeScreen();
+  session.csrf = null;
+  showView('pair');
   $('pairError').textContent = error;
   setNetwork('Not paired');
 }
+function showHome() {
+  leaveStream();
+  showView('home');
+  setNetwork('Paired', true);
+  showHomeScreen();
+}
 function showRemote() {
-  $('pairView').classList.add('hidden');
-  $('remoteView').classList.remove('hidden');
-  $('signOut').classList.remove('hidden');
+  hideHomeScreen();
+  showView('remote');
+  rememberStreaming(true);
   state.active = true;
   // Phones start with a compact session; settings stay one tap away.
   $('settingsPanel').classList.toggle('hidden', window.innerWidth < 700);
@@ -96,43 +147,50 @@ function showRemote() {
   requestAnimationFrame(updateScreenLayout);
 }
 
-// ---------------------------------------------------------------- API
+// ---------------------------------------------------------------- start
 
-async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (state.csrf && options.method && options.method !== 'GET') headers['X-Abyss-CSRF'] = state.csrf;
-  const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, headers });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.error || `The PC answered ${response.status}.`);
-    error.status = response.status;
-    throw error;
-  }
-  return data;
-}
-// The CSRF token changes whenever the host restarts, so every reconnect fetches it again.
-async function refreshIdentity() {
-  const me = await api('/api/v1/me');
-  state.csrf = me.csrf;
-  state.myId = me.id;
-  state.features = me.features || {};
-}
+// The CSRF token changes whenever the host restarts, so this and every reconnect fetch the
+// identity again (refreshIdentity in api.js).
 async function initialize() {
   try {
     await refreshIdentity();
-    showRemote();
-    await getDisplays();
-    await detectGameMode();
-    connect();
   } catch (error) {
     showPair(error.status === 401 ? '' : `Could not reach the PC: ${error.message}`);
+    return;
   }
+  clearPairCode();
+  await detectGameMode();
+  if (wasStreaming()) openStream(); else showHome();
+}
+
+// Shows a monitor. `display` is a monitor from the PC's list, 'main' for the main one, or
+// nothing for the one used last time. `mode` is 'desktop' or 'game' (nothing keeps the last
+// choice; Game mode quietly becomes Desktop mode where it is not available).
+async function openStream({ display, mode, sound = false } = {}) {
+  showRemote();
+  showError('');
+  showOverlay('Connecting to your desktop…');
+  if (display && display !== 'main') state.displayName = display.name;
+  if (mode) setStreamMode(mode, { restart: false, remember: false });
+  if (sound && await soundPossible()) state.soundOn = true;
+  syncToggles();
+  try {
+    await getDisplays();
+  } catch (error) {
+    if (error.status === 401) showPair(UNPAIRED);
+    else scheduleReconnect('The PC is not answering. Retrying…');
+    return;
+  }
+  const main = display === 'main' && state.displays.find(d => d.primary);
+  if (main) { state.display = main.id; state.displayName = main.name; }
+  showSessionName();
+  saveSettings();
+  connect();
 }
 
 // Game mode needs a hardware encoder on the PC and WebCodecs H.264 in this browser.
 async function detectGameMode() {
-  state.gameAvailable = state.features.gameMode === true && await gameModeSupported();
+  state.gameAvailable = session.features.gameMode === true && await gameModeSupported();
   $('streamModeLabel').classList.toggle('hidden', !state.gameAvailable);
   $('quickStreamModeLabel').classList.toggle('hidden', !state.gameAvailable);
   setStreamMode(state.gameAvailable ? state.mode : 'desktop', { restart: false });
@@ -149,17 +207,14 @@ function setStreamMode(mode, { restart = true, remember = true } = {}) {
   if (restart) restartVideo();
 }
 async function getDisplays() {
-  const items = await api('/api/v1/displays');
-  state.displays = items;
-  $('displayPick').replaceChildren(...items.map(d => new Option(
-    `${d.primary ? '★ ' : ''}Display ${d.id + 1} · ${d.width}×${d.height}`, String(d.id))));
-  const exists = (id) => items.some(d => d.id === id);
-  if (!exists(state.display) || state.preferredDisplay !== null) {
-    state.display = exists(state.preferredDisplay) ? state.preferredDisplay : (items.find(d => d.primary)?.id ?? 0);
-    state.preferredDisplay = null;
-  }
-  $('displayPick').value = String(state.display);
-  syncQuickControls();
+  state.displays = await api('/api/v1/displays');
+  state.display = pickMonitor(state.displays, state.displayName)?.id ?? 0;
+  showSessionName();
+}
+// The stream's title is the monitor on screen, written like on its card ("2 · Aurora 32 4K").
+function showSessionName() {
+  const display = state.displays.find(d => d.id === state.display);
+  $('sessionName').textContent = display ? monitorLabel(display) : 'Desktop';
 }
 
 // ---------------------------------------------------------------- connections
@@ -183,7 +238,7 @@ function closeConnections() {
 // connection can never affect a newer one.
 function connect() {
   closeConnections();
-  if (!state.active || !state.csrf) return;
+  if (!state.active || !session.csrf) return;
   state.stopped = false;
   showOverlay('Connecting to your desktop…');
   setNetwork('Connecting…');
@@ -192,29 +247,70 @@ function connect() {
   openAudio(state.epoch);
 }
 
-// ---------------------------------------------------------------- sound
+// ---------------------------------------------------------------- on/off switches
 
-function setSoundButtons() {
-  for (const id of ['soundToggle', 'quickSound']) {
-    const button = $(id);
-    button.setAttribute('aria-pressed', String(state.soundOn));
-    button.firstChild.textContent = state.soundOn ? '🔊 ' : '🔇 ';
-    button.querySelector('span').textContent = state.soundOn ? 'Sound on' : 'Sound off';
+// Every on/off switch of the stream is one entry in this list. Each entry gets a button in
+// the top bar and one in the phone's Controls panel, so a new switch (an on-screen gamepad,
+// special keys) only has to be added here.
+const toggles = [
+  { id: 'watch', icon: 'eye', label: 'Watch only', hint: 'Look without sending mouse, keyboard or controller input',
+    isOn: () => state.watchOnly, flip: () => setWatchOnly(!state.watchOnly) },
+  { id: 'sound', icon: 'sound', label: 'Sound', hint: "Play the PC's sound on this device",
+    isOn: () => state.soundOn, flip: () => toggleSound() },
+];
+
+function buildToggles() {
+  for (const [place, className] of [[$('topToggles'), 'toolbutton'], [$('quickToggles'), '']]) {
+    place.replaceChildren(...toggles.map((toggle) => {
+      const button = el('button', className);
+      button.type = 'button';
+      button.title = toggle.hint;
+      button.dataset.toggle = toggle.id;
+      const shown = el('span', 'toggle-state');
+      shown.setAttribute('aria-hidden', 'true'); // aria-pressed already says it
+      button.append(icon(toggle.icon), el('span', '', toggle.label), shown);
+      button.addEventListener('click', toggle.flip);
+      return button;
+    }));
   }
 }
+
+// Shows each switch as on or off wherever it has a button.
+function syncToggles() {
+  for (const button of document.querySelectorAll('[data-toggle]')) {
+    const on = toggles.find((toggle) => toggle.id === button.dataset.toggle).isOn();
+    button.setAttribute('aria-pressed', String(on));
+    button.querySelector('.toggle-state').textContent = on ? 'On' : 'Off';
+  }
+  $('watchBadge').classList.toggle('hidden', !state.watchOnly);
+}
+
+// Watch only: the picture and sound keep coming, but no pointer, keyboard, text or
+// controller input leaves this device (see send). A badge on the picture shows it is on.
+function setWatchOnly(on) {
+  if (on) releaseAllInput(); // let go of every key and button on the PC before input stops
+  state.watchOnly = on;
+  if (on && document.pointerLockElement) document.exitPointerLock();
+  if (!on) gamepads.resync(); // a controller's current state is sent again
+  syncToggles();
+  saveSettings();
+  showError(on ? 'Watch only is on. Nothing you do here reaches the PC.' : '');
+}
+
+// ---------------------------------------------------------------- sound
 
 function openAudio(epoch) {
   if (!state.soundOn || !state.active || state.stopped || state.audio || epoch !== state.epoch) return;
   if (!audioUnlocked()) { armAudioUnlock(); return; }
   state.audio = startAudio({
     url: wsUrl('/api/v1/audio'),
-    protocols: [PROTOCOL, state.csrf],
+    protocols: [PROTOCOL, session.csrf],
     onClose: (code, reason) => {
       if (epoch !== state.epoch) return;
       state.audio = null;
       if (code === CLOSE_UNSUPPORTED) {
         state.soundOn = false;
-        setSoundButtons();
+        syncToggles();
         saveSettings();
         showError(`Sound is not available: ${reason || 'no audio output on the PC'}.`);
         return;
@@ -229,6 +325,18 @@ function openAudio(epoch) {
 function stopAudio() {
   state.audio?.stop();
   state.audio = null;
+}
+
+// A tap that will end in a stream with sound (starting a game) unlocks audio at once, while
+// the browser still counts it as the user's action.
+let soundUnlock = Promise.resolve(true);
+function prepareSound() {
+  soundUnlock = unlockAudio().then(() => true, () => false);
+}
+// False only when this browser cannot play the PC's sound at all. An unlock that is merely
+// still waiting after a moment counts as possible: the next tap then starts the sound.
+function soundPossible() {
+  return Promise.race([soundUnlock, new Promise((resolve) => setTimeout(resolve, 1500, true))]);
 }
 
 // After a page load, sound may only start inside a tap or key press.
@@ -259,12 +367,12 @@ async function toggleSound() {
       showError(error.message);
     }
   }
-  setSoundButtons();
+  syncToggles();
   saveSettings();
 }
 
 function openControl(epoch) {
-  const control = new WebSocket(wsUrl('/api/v1/control'), [PROTOCOL, state.csrf]);
+  const control = new WebSocket(wsUrl('/api/v1/control'), [PROTOCOL, session.csrf]);
   state.control = control;
   control.onopen = () => {
     if (epoch !== state.epoch) return;
@@ -286,7 +394,7 @@ function requestedWidth() {
 function openVideo(epoch) {
   state.stats = { frames: 0, bytes: 0, since: performance.now(), idle: false };
   const common = {
-    protocols: [PROTOCOL, state.csrf],
+    protocols: [PROTOCOL, session.csrf],
     onFrame: (image, info) => { if (epoch === state.epoch) drawFrame(image, info); },
     onStatus: (status) => { if (epoch === state.epoch) streamStatus(status); },
     onClose: (code, reason) => { if (epoch === state.epoch) connectionLost('video', code, reason); },
@@ -370,8 +478,9 @@ async function reconnectNow() {
   if (!state.active) return;
   try {
     await refreshIdentity();
+    if (state.displays.length === 0) await getDisplays(); // the PC was not answering when the stream was opened
   } catch (error) {
-    if (error.status === 401) { showPair('This device is no longer paired. Pair it again with a new code.'); return; }
+    if (error.status === 401) { showPair(UNPAIRED); return; }
     scheduleReconnect('The PC is not answering. Retrying…');
     return;
   }
@@ -530,6 +639,8 @@ new ResizeObserver(() => {
 // ---------------------------------------------------------------- input
 
 function send(kind, data = {}) {
+  // Watch only: nothing goes to the PC except "release", which lets go of what was held.
+  if (state.watchOnly && kind !== 'release') return false;
   const control = state.control;
   if (!control || control.readyState !== WebSocket.OPEN) return false;
   control.send(JSON.stringify({ kind, ...data }));
@@ -605,6 +716,7 @@ function queueLockedMove(event) {
   });
 }
 $('lockMouse').addEventListener('click', () => {
+  if (state.watchOnly) { showError(WATCHING); return; }
   const request = desktop.requestPointerLock?.();
   if (request?.catch) request.catch(() => showError('This browser did not allow locking the mouse.'));
   else if (!desktop.requestPointerLock) showError('This browser cannot lock the mouse.');
@@ -755,6 +867,7 @@ document.addEventListener('keydown', (event) => {
   if (!state.active || !state.control || typingTarget(event.target)) return;
   if (event.code === 'F5' || ((event.ctrlKey || event.metaKey) && event.code === 'KeyR')) return; // let the browser reload
   if (event.code === 'Escape' && state.immersive) setImmersive(false);
+  if (state.watchOnly) return; // the keys stay with this browser
   event.preventDefault();
   key(event.code, 'down');
 });
@@ -782,30 +895,51 @@ window.addEventListener('pageshow', (event) => { if (event.persisted && state.ac
 
 // ---------------------------------------------------------------- controls
 
-$('pairForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  $('pairError').textContent = '';
-  const button = $('pairForm').querySelector('button');
-  button.disabled = true;
-  try {
-    await api('/api/v1/pair', { method: 'POST', body: JSON.stringify({ code: $('pairCode').value.trim(), label: $('deviceName').value }) });
-    $('pairCode').value = '';
-    await initialize();
-  } catch (error) {
-    $('pairError').textContent = error.message;
-  } finally {
-    button.disabled = false;
-  }
-});
-
-function selectDisplay(id) {
-  state.display = id;
-  $('displayPick').value = String(id);
-  syncQuickControls();
+function selectDisplay(display) {
+  state.display = display.id;
+  state.displayName = display.name;
+  showSessionName();
   saveSettings();
   restartVideo();
 }
-$('displayPick').addEventListener('change', () => selectDisplay(Number($('displayPick').value)));
+
+// The monitor switcher: the same cards as on the home screen, in a sheet over the stream.
+const sheetMonitors = createMonitorPicker($('sheetMonitorList'), {
+  status: $('sheetMonitorStatus'),
+  current: () => state.display,
+  onList: (displays) => { state.displays = displays; showSessionName(); },
+  onPick: (display) => { setMonitorSheet(false); selectDisplay(display); },
+  unpaired: (error) => { if (error.status === 401) showPair(UNPAIRED); return error.status === 401; },
+});
+function setMonitorSheet(open) {
+  state.monitorsOpen = open;
+  $('monitorSheet').classList.toggle('hidden', !open);
+  $('openMonitors').setAttribute('aria-expanded', String(open));
+  if (!open) { sheetMonitors.stop(); return; }
+  setQuickMenu(false);
+  if (state.keyboardOpen) setKeyboard(false); // one sheet at a time: they share a place on screen
+  sheetMonitors.start();
+}
+$('openMonitors').addEventListener('click', () => setMonitorSheet(!state.monitorsOpen));
+$('quickMonitors').addEventListener('click', () => setMonitorSheet(true));
+$('closeMonitors').addEventListener('click', () => setMonitorSheet(false));
+
+// Screenshot: the PC captures the monitor at full size and this device saves the picture.
+async function saveScreenshot() {
+  setQuickMenu(false);
+  showError('Taking a screenshot…');
+  try {
+    const response = await fetchFile(`/api/v1/displays/${state.display}/screenshot`);
+    const name = fileNameFromDisposition(response.headers.get('Content-Disposition'), 'Abyss Remote screenshot.jpg');
+    await saveBlob(await response.blob(), name);
+    showError(`Screenshot taken: ${name}`);
+  } catch (error) {
+    if (error.status === 401) showPair(UNPAIRED);
+    else showError(error.status ? error.message : 'The screenshot could not be fetched.');
+  }
+}
+$('screenshot').addEventListener('click', saveScreenshot);
+$('quickScreenshot').addEventListener('click', saveScreenshot);
 $('fpsPick').addEventListener('change', () => { saveSettings(); restartVideo(); });
 $('streamMode').addEventListener('change', () => setStreamMode($('streamMode').value));
 $('quickStreamMode').addEventListener('change', () => setStreamMode($('quickStreamMode').value));
@@ -820,10 +954,12 @@ $('refresh').addEventListener('click', async () => {
   showError('');
   try { await refreshIdentity(); await getDisplays(); state.retryCount = 0; connect(); }
   catch (error) {
-    if (error.status === 401) showPair('This device is no longer paired. Pair it again with a new code.');
+    if (error.status === 401) showPair(UNPAIRED);
     else showError(error.message);
   }
 });
+$('goHome').addEventListener('click', showHome);
+$('quickHome').addEventListener('click', showHome);
 $('zoom').addEventListener('input', () => {
   state.zoom = Number($('zoom').value);
   $('zoomValue').textContent = `${state.zoom}%`;
@@ -877,27 +1013,22 @@ for (const event of ['fullscreenchange', 'webkitfullscreenchange']) {
 function syncQuickControls() {
   $('quickFit').value = $('fitPick').value;
   $('quickMode').value = $('modePick').value;
-  const quickDisplay = $('quickDisplay');
-  if (quickDisplay.options.length !== $('displayPick').options.length) {
-    quickDisplay.replaceChildren(...[...$('displayPick').options].map(o => new Option(o.textContent, o.value)));
-  }
-  quickDisplay.value = String(state.display);
 }
 function setQuickMenu(open) {
   state.menuOpen = !!open;
   $('quickPanel').classList.toggle('hidden', !open);
   $('quickToggle').setAttribute('aria-expanded', String(open));
-  $('quickToggle').setAttribute('aria-label', open ? 'Hide remote controls' : 'Open remote controls');
+  $('quickToggle').setAttribute('aria-label', open ? 'Hide controls' : 'Open controls');
 }
 $('immersive').addEventListener('click', () => setImmersive(!state.immersive));
-$('soundToggle').addEventListener('click', toggleSound);
-$('quickSound').addEventListener('click', toggleSound);
 $('quickToggle').addEventListener('click', () => setQuickMenu(!state.menuOpen));
 $('quickClose').addEventListener('click', () => setQuickMenu(false));
 $('quickKeyboard').addEventListener('click', () => { setQuickMenu(false); setKeyboard(true); });
-$('quickRight').addEventListener('click', () => mouseClick(2));
-$('quickScrollUp').addEventListener('click', () => send('wheel', { delta: 360 }));
-$('quickScrollDown').addEventListener('click', () => send('wheel', { delta: -360 }));
+// A button that sends input says why nothing happens while Watch only is on.
+const whenControlling = (action) => () => { if (state.watchOnly) showError(WATCHING); else action(); };
+$('quickRight').addEventListener('click', whenControlling(() => mouseClick(2)));
+$('quickScrollUp').addEventListener('click', whenControlling(() => send('wheel', { delta: 360 })));
+$('quickScrollDown').addEventListener('click', whenControlling(() => send('wheel', { delta: -360 })));
 $('quickFit').addEventListener('change', () => {
   $('fitPick').value = $('quickFit').value;
   state.fitUserSet = true;
@@ -905,26 +1036,26 @@ $('quickFit').addEventListener('change', () => {
   saveSettings();
 });
 $('quickMode').addEventListener('change', () => { $('modePick').value = $('quickMode').value; saveSettings(); });
-$('quickDisplay').addEventListener('change', () => selectDisplay(Number($('quickDisplay').value)));
 $('quickReconnect').addEventListener('click', () => { setQuickMenu(false); $('refresh').click(); });
 $('quickExit').addEventListener('click', () => setImmersive(false));
 // Touching the desktop closes the panel so swipes are not mistaken for panel taps.
 $('desktopStage').addEventListener('pointerdown', () => { if (state.menuOpen) setQuickMenu(false); });
 
-$('mouseLeft').addEventListener('click', () => mouseClick(0));
-$('mouseRight').addEventListener('click', () => mouseClick(2));
-$('scrollUp').addEventListener('click', () => send('wheel', { delta: 360 }));
-$('scrollDown').addEventListener('click', () => send('wheel', { delta: -360 }));
+$('mouseLeft').addEventListener('click', whenControlling(() => mouseClick(0)));
+$('mouseRight').addEventListener('click', whenControlling(() => mouseClick(2)));
+$('scrollUp').addEventListener('click', whenControlling(() => send('wheel', { delta: 360 })));
+$('scrollDown').addEventListener('click', whenControlling(() => send('wheel', { delta: -360 })));
 for (const [id, code] of [['escapeKey', 'Escape'], ['tabKey', 'Tab'], ['enterKey', 'Enter'], ['backspaceKey', 'Backspace']])
-  $(id).addEventListener('click', () => tapKey(code));
-$('ctrlC').addEventListener('click', () => combo('KeyC'));
-$('ctrlV').addEventListener('click', () => combo('KeyV'));
+  $(id).addEventListener('click', whenControlling(() => tapKey(code)));
+$('ctrlC').addEventListener('click', whenControlling(() => combo('KeyC')));
+$('ctrlV').addEventListener('click', whenControlling(() => combo('KeyV')));
 
 // Text: an explicit Send (rather than a keystroke per phone key) works with autocorrect,
 // paste and any Unicode text, and never sends half-finished compositions.
 function sendText() {
   const text = $('textSend').value;
   if (!text) return;
+  if (state.watchOnly) { showError(WATCHING); return; }
   if (sendTextChunks(text)) $('textSend').value = '';
   else showError('Input is disconnected. Your text is kept; reconnect and try again.');
 }
@@ -944,6 +1075,7 @@ function setKeyboard(open) {
   $('keyboardSheet').classList.toggle('hidden', !open);
   $('showKeyboard').setAttribute('aria-expanded', String(open));
   if (open) {
+    if (state.monitorsOpen) setMonitorSheet(false);
     $('keyboardStatus').textContent = '';
     $('keyboardText').focus({ preventScroll: true }); // must happen inside the tap for iOS to show its keyboard
   } else {
@@ -957,12 +1089,14 @@ $('closeKeyboard').addEventListener('click', () => setKeyboard(false));
 $('keyboardSend').addEventListener('click', () => {
   const text = $('keyboardText').value;
   if (!text) { $('keyboardStatus').textContent = 'Type something first.'; return; }
+  if (state.watchOnly) { $('keyboardStatus').textContent = WATCHING; return; }
   if (!sendTextChunks(text)) { $('keyboardStatus').textContent = 'Disconnected. Your text is kept; reconnect first.'; return; }
   $('keyboardText').value = '';
   $('keyboardStatus').textContent = 'Sent to the active window on your PC.';
 });
 for (const [id, code] of [['keyboardTab', 'Tab'], ['keyboardEnter', 'Enter'], ['keyboardBackspace', 'Backspace']]) {
   $(id).addEventListener('click', () => {
+    if (state.watchOnly) { $('keyboardStatus').textContent = WATCHING; return; }
     if (state.control?.readyState !== WebSocket.OPEN) { $('keyboardStatus').textContent = 'Input is disconnected.'; return; }
     tapKey(code);
     $('keyboardText').focus({ preventScroll: true });
@@ -996,53 +1130,22 @@ $('keyboardClipSet').addEventListener('click', async () => {
   catch (error) { $('keyboardStatus').textContent = error.message; }
 });
 
-$('devicesButton').addEventListener('click', async () => {
-  const panel = $('devicesPanel');
-  panel.classList.toggle('hidden');
-  if (!panel.classList.contains('hidden')) await populateDevices();
-});
-async function populateDevices() {
-  try {
-    const items = await api('/api/v1/devices');
-    $('devicesList').replaceChildren(...items.map((d) => {
-      const row = document.createElement('div');
-      row.className = 'device-entry';
-      const copy = document.createElement('div');
-      const name = document.createElement('strong');
-      name.textContent = d.name + (d.id === state.myId ? ' · this device' : '');
-      const dates = document.createElement('small');
-      dates.textContent = `Paired ${new Date(d.createdUtc).toLocaleDateString()} · expires ${new Date(d.expiresUtc).toLocaleDateString()}`;
-      copy.append(name, dates);
-      const revoke = document.createElement('button');
-      revoke.textContent = 'Revoke';
-      revoke.className = 'ghost';
-      revoke.addEventListener('click', async () => {
-        if (!window.confirm(`Revoke access for ${d.name}?`)) return;
-        try {
-          await api(`/api/v1/devices/${encodeURIComponent(d.id)}`, { method: 'DELETE' });
-          if (d.id === state.myId) showPair('Device revoked. Pair again to use this PC.');
-          else await populateDevices();
-        } catch (error) { showError(error.message); }
-      });
-      row.append(copy, revoke);
-      return row;
-    }));
-  } catch (error) { showError(error.message); }
-}
-$('signOut').addEventListener('click', async () => {
-  if (!window.confirm('Sign out and revoke this device? You will need a new pairing code.')) return;
-  try { await api('/api/v1/logout', { method: 'POST' }); showPair('Signed out.'); }
-  catch (error) { showError(error.message); }
-});
-
 // Controllers work in both modes; the host answers with a notice if its driver is missing.
 const gamepads = watchGamepads({
   send: (kind, data) => state.active && send(kind, data),
   onChange: (names) => {
-    if (names.length) $('quickStatus').textContent = `🎮 ${names.length} controller${names.length > 1 ? 's' : ''} connected`;
+    if (names.length) $('quickStatus').textContent = `${names.length} controller${names.length > 1 ? 's' : ''} connected`;
   },
 });
 
 applySettings(loadSettings());
-setSoundButtons();
+buildToggles();
+syncToggles();
+initPairing({ onPaired: initialize });
+initHome({
+  openStream,
+  prepareSound,
+  gameMode: () => state.gameAvailable,
+  signedOut: showPair,
+});
 initialize();

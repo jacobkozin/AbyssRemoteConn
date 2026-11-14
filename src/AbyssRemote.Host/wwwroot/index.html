@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover">
-  <meta name="theme-color" content="#070e19">
+  <meta name="theme-color" content="#131a2a">
   <meta name="apple-mobile-web-app-title" content="Abyss Remote">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -14,52 +14,153 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="/icon-192.png">
   <link rel="stylesheet" href="/style.css?v=1.0.0">
+  <link rel="stylesheet" href="/home.css?v=1.0.0">
   <script type="module" src="/app.js?v=1.0.0"></script>
 </head>
 <body>
+  <!-- The icons, drawn once here. Markup shows one with a "use" element that points at its id,
+       scripts with icon() from dom.js. Lines are drawn in the color of the text around them. -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="4"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 7 7 0 1 0 20 14.5z"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4z"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+  </svg>
   <header class="bar" id="siteHeader">
-    <div class="brand"><div class="logo">A</div><div><b>ABYSS <em>REMOTE</em></b><small>YOUR DESKTOP. YOUR NETWORK.</small></div></div>
-    <div class="top-right"><span id="networkState" class="status">Checking connection…</span><button id="signOut" class="ghost hidden" title="Revoke this device">Sign out</button></div>
+    <div class="brand"><img class="logo" src="/icon-192.png" alt="" width="36" height="36"><b>Abyss Remote</b></div>
+    <span id="networkState" class="status">Checking connection…</span>
   </header>
   <main>
     <section id="pairView" class="pair-view hidden">
       <div class="pair-card">
-        <div class="hero-icon">⌘</div>
-        <div class="eyebrow">PRIVATE REMOTE ACCESS</div>
-        <h1>Your desktop.<br><span>Anywhere on your network.</span></h1>
-        <p>Pair this device with the eight-digit, one-time code shown in the Abyss Remote window on your PC. Press <kbd>P</kbd> there for a new code.</p>
+        <img class="hero-icon" src="/icon-192.png" alt="" width="64" height="64">
+        <h1>Pair this device</h1>
+        <p>Enter the eight-digit code shown in the Abyss Remote window on your PC. A code works once and for a few minutes; click <strong>New code</strong> there if yours has run out.</p>
         <form id="pairForm">
-          <label for="deviceName">THIS DEVICE</label>
-          <input id="deviceName" value="My iPhone / iPad" maxlength="60" required autocomplete="off">
-          <label for="pairCode">PAIRING CODE</label>
-          <input id="pairCode" type="text" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" placeholder="••••••••" autocomplete="one-time-code" required>
-          <button class="primary" type="submit">Connect this device <span aria-hidden="true">→</span></button>
+          <label for="deviceName">Name for this device</label>
+          <input id="deviceName" maxlength="60" required autocomplete="off" enterkeyhint="next">
+          <label for="pairCode">Pairing code</label>
+          <input id="pairCode" type="text" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" placeholder="••••••••" autocomplete="one-time-code" autocapitalize="none" autocorrect="off" enterkeyhint="go" required>
+          <button id="pairSubmit" class="button primary" type="submit">Pair this device</button>
         </form>
         <div id="pairError" class="error" role="alert"></div>
+        <details class="help">
+          <summary>First time on this phone or tablet?</summary>
+          <p>An iPhone or iPad has to trust this PC's Abyss Remote certificate once. Until it does, Safari warns about this page and the picture does not connect.</p>
+          <ol>
+            <li><a href="/AbyssRemote-RootCA.cer">Download the certificate</a> in Safari and allow the download.</li>
+            <li>Open Settings &gt; General &gt; VPN &amp; Device Management and install the Abyss Remote profile.</li>
+            <li>Open Settings &gt; General &gt; About &gt; Certificate Trust Settings and turn on full trust for Abyss Remote.</li>
+          </ol>
+          <p>Before you turn on trust, compare the certificate's fingerprint on this device with the one in the Abyss Remote window on the PC. They must be the same.</p>
+        </details>
         <p class="footnote">Only pair devices you control. Never share the code or expose this PC to the internet.</p>
       </div>
     </section>
-    <section id="remoteView" class="remote hidden" aria-label="Remote session">
+    <section id="homeView" class="home hidden" aria-label="Home">
+      <div class="home-main">
+        <section class="panel" aria-labelledby="monitorsTitle">
+          <div class="panel-head"><h2 id="monitorsTitle">Monitors</h2><p class="quiet">Choose a monitor to open it.</p></div>
+          <ul id="monitorList" class="monitor-list"></ul>
+          <p id="monitorStatus" class="status-line" role="status"></p>
+        </section>
+        <section id="gamesPanel" class="panel hidden" aria-labelledby="gamesTitle">
+          <div class="panel-head">
+            <h2 id="gamesTitle">Games</h2>
+            <div class="button-row">
+              <button id="bigPicture" class="button" type="button"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Big Picture</button>
+              <button id="bigPictureClose" class="button" type="button">Close Big Picture</button>
+            </div>
+          </div>
+          <label id="gameFilterLabel" class="search hidden">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="visually-hidden">Find a game</span>
+            <input id="gameFilter" type="search" placeholder="Find a game" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="search">
+          </label>
+          <p id="gamesStatus" class="status-line" role="status"></p>
+          <ul id="gameGrid" class="game-grid"></ul>
+          <button id="showAllGames" class="button show-all hidden" type="button"></button>
+        </section>
+      </div>
+      <div class="home-side">
+        <section id="filesPanel" class="panel" aria-labelledby="filesTitle">
+          <h2 id="filesTitle">Files</h2>
+          <div class="drop-zone">
+            <button id="sendFiles" class="button primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Send files to the PC</button>
+            <input id="filePicker" class="visually-hidden" type="file" multiple tabindex="-1" aria-hidden="true">
+            <p class="drop-hint">or drop them here</p>
+          </div>
+          <ul id="uploadList" class="rows" aria-label="Files being sent"></ul>
+          <ul id="fileList" class="rows" aria-label="Files in the folder on the PC"></ul>
+          <p id="filesStatus" class="status-line" role="status"></p>
+          <p id="filesFolder" class="quiet folder-path"></p>
+        </section>
+        <section class="panel" aria-labelledby="pcTitle">
+          <h2 id="pcTitle">This PC</h2>
+          <div id="pcActions" class="button-row"></div>
+          <p id="pcStatus" class="status-line" role="status"></p>
+          <label for="clipText" class="field-label">Clipboard</label>
+          <textarea id="clipText" rows="2" maxlength="4096" placeholder="Text for the PC's clipboard, or fetched from it" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button id="clipGet" class="button" type="button">Get PC clipboard</button>
+            <button id="clipSet" class="button" type="button">Copy to PC clipboard</button>
+          </div>
+          <p id="clipStatus" class="status-line" role="status"></p>
+        </section>
+        <section class="panel" aria-labelledby="deviceTitle">
+          <h2 id="deviceTitle">This device</h2>
+          <p class="quiet">Paired as <strong id="deviceLabel"></strong>.</p>
+          <div class="button-row">
+            <button id="devicesButton" class="button" type="button" aria-expanded="false" aria-controls="devicesPanel">Paired devices</button>
+            <button id="signOut" class="button danger" type="button">Sign out</button>
+          </div>
+          <div id="devicesPanel" class="hidden">
+            <div id="devicesList" class="rows"></div>
+            <p class="quiet">Revoking a device disconnects it at once. Pairings expire after 30 days.</p>
+          </div>
+          <p id="deviceStatus" class="status-line" role="status"></p>
+        </section>
+      </div>
+    </section>
+    <section id="remoteView" class="remote hidden" aria-label="Stream">
       <div class="session-head">
-        <div class="session-title"><span class="session-dot"></span><div><strong>Live desktop</strong><span id="streamStats">Waiting for video…</span></div></div>
+        <div class="session-title">
+          <button id="goHome" class="toolbutton" type="button" title="Leave the stream"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></button>
+          <div><strong id="sessionName">Desktop</strong><span id="streamStats">Waiting for video…</span></div>
+        </div>
         <div class="session-actions">
-          <button id="soundToggle" class="toolbutton" title="Play the PC's sound on this device" aria-pressed="false">🔇 <span>Sound off</span></button>
-          <button id="immersive" class="toolbutton accent" title="Use the entire screen" aria-pressed="false">⛶ <span>Full screen</span></button>
-          <button id="refresh" class="toolbutton" title="Reconnect session">↻ <span>Reconnect</span></button>
-          <button id="settingsToggle" class="toolbutton" title="Show viewing settings" aria-expanded="false">⚙ <span>Settings</span></button>
+          <!-- The stream's on/off switches. app.js builds them from its list of toggles; a new
+               switch (an on-screen gamepad, special keys) is added to that list, not here. -->
+          <div id="topToggles" class="toggle-group"></div>
+          <button id="openMonitors" class="toolbutton" type="button" title="Show another monitor" aria-expanded="false" aria-controls="monitorSheet"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><span>Monitors</span></button>
+          <button id="screenshot" class="toolbutton" type="button" title="Save a picture of this monitor"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Screenshot</span></button>
+          <button id="immersive" class="toolbutton" type="button" title="Use the entire screen" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg><span>Full screen</span></button>
+          <button id="refresh" class="toolbutton" type="button" title="Connect again"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span>Reconnect</span></button>
+          <button id="settingsToggle" class="toolbutton" type="button" title="Show viewing settings" aria-expanded="false" aria-controls="settingsPanel"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></button>
         </div>
       </div>
       <div class="toolbar" id="settingsPanel">
-        <label id="streamModeLabel" class="hidden">MODE <select id="streamMode" title="Desktop: sharp still images. Game: 60 fps hardware video."><option value="desktop">Desktop · sharp</option><option value="game">Game · 60 fps</option></select></label>
-        <label>MONITOR <select id="displayPick" title="Pick a monitor"></select></label>
-        <label>FIT <select id="fitPick" title="Fit shows the entire screen; Fill crops; Stretch changes its shape"><option value="fit">Fit whole screen</option><option value="fill">Fill / crop edges</option><option value="stretch">Stretch</option></select></label>
-        <label>INPUT <select id="modePick"><option value="direct">Direct touch</option><option value="trackpad">Trackpad</option></select></label>
-        <span class="clarity-chip desktop-only" title="High-quality JPEG at a resolution matched to this screen">✦ HIGH CLARITY</span>
-        <label class="desktop-only">FRAME RATE <select id="fpsPick"><option value="6">6 FPS</option><option value="12">12 FPS</option><option value="18" selected>18 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option></select></label>
-        <label class="game-only">RESOLUTION <select id="gameHeightPick"><option value="720">720p</option><option value="1080" selected>1080p</option><option value="1440">1440p</option><option value="2160">Native (up to 4K)</option></select></label>
-        <label class="game-only">FRAME RATE <select id="gameFpsPick"><option value="30">30 FPS</option><option value="60" selected>60 FPS</option><option value="120">120 FPS</option></select></label>
-        <label class="game-only">BITRATE <select id="bitratePick" title="Higher looks better but needs stronger Wi-Fi"><option value="10000">10 Mbps</option><option value="20000" selected>20 Mbps</option><option value="35000">35 Mbps</option><option value="50000">50 Mbps</option></select></label>
-        <button id="lockMouse" class="toolbutton game-only" type="button" title="Capture the mouse for games (press Esc to release)">🖱 Lock mouse</button>
+        <label id="streamModeLabel" class="hidden">Mode <select id="streamMode" title="Desktop: sharp still images. Game: 60 fps hardware video."><option value="desktop">Desktop · sharp</option><option value="game">Game · 60 fps</option></select></label>
+        <label>Fit <select id="fitPick" title="Fit shows the entire screen; Fill crops; Stretch changes its shape"><option value="fit">Fit whole screen</option><option value="fill">Fill / crop edges</option><option value="stretch">Stretch</option></select></label>
+        <label>Touch <select id="modePick"><option value="direct">Direct touch</option><option value="trackpad">Trackpad</option></select></label>
+        <label class="desktop-only">Frame rate <select id="fpsPick"><option value="6">6 FPS</option><option value="12">12 FPS</option><option value="18" selected>18 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option></select></label>
+        <label class="game-only">Resolution <select id="gameHeightPick"><option value="720">720p</option><option value="1080" selected>1080p</option><option value="1440">1440p</option><option value="2160">Native (up to 4K)</option></select></label>
+        <label class="game-only">Frame rate <select id="gameFpsPick"><option value="30">30 FPS</option><option value="60" selected>60 FPS</option><option value="120">120 FPS</option></select></label>
+        <label class="game-only">Bitrate <select id="bitratePick" title="Higher looks better but needs stronger Wi-Fi"><option value="10000">10 Mbps</option><option value="20000" selected>20 Mbps</option><option value="35000">35 Mbps</option><option value="50000">50 Mbps</option></select></label>
+        <button id="lockMouse" class="toolbutton game-only" type="button" title="Capture the mouse for games (press Esc to release)">Lock mouse</button>
       </div>
       <div class="desktop-stage" id="desktopStage">
         <div class="screen-scroller" id="screenScroller">
@@ -69,39 +170,51 @@
           </div>
         </div>
         <div class="screen-overlay" id="screenOverlay">Connecting to your desktop…</div>
+        <div id="watchBadge" class="watch-badge hidden"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>Watch only</div>
+        <!-- Phones hide the line under the stage, so messages also appear here for a moment. -->
+        <div id="stageNote" class="stage-note hidden" role="status"></div>
       </div>
       <!-- Phones: the desktop fills the screen and this floating button is the only
            always-visible control. -->
-      <button id="quickToggle" class="quick-toggle" type="button" aria-controls="quickPanel" aria-expanded="false" aria-label="Open remote controls">
-        <span class="quick-toggle-icon" aria-hidden="true">✦</span><span class="quick-toggle-label">Controls</span>
+      <button id="quickToggle" class="quick-toggle" type="button" aria-controls="quickPanel" aria-expanded="false" aria-label="Open controls">
+        <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span class="quick-toggle-label">Controls</span>
       </button>
-      <aside id="quickPanel" class="quick-panel hidden" aria-label="Remote desktop controls">
+      <aside id="quickPanel" class="quick-panel hidden" aria-label="Stream controls">
         <div class="quick-panel-head">
-          <div><span class="quick-eyebrow">ABYSS REMOTE</span><strong>Desktop controls</strong><small id="quickStatus">Private session</small></div>
-          <button id="quickClose" type="button" aria-label="Hide remote controls">✕</button>
+          <div><strong>Controls</strong><small id="quickStatus">Connecting…</small></div>
+          <button id="quickClose" class="icon-button" type="button" aria-label="Hide controls"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
         <div class="quick-primary">
-          <button type="button" id="quickKeyboard" class="quick-accent">⌨ <span>Keyboard</span></button>
-          <button type="button" id="quickRight" title="Right-click at the pointer">◌ <span>Right click</span></button>
-          <button type="button" id="quickScrollUp">↑ <span>Scroll up</span></button>
-          <button type="button" id="quickScrollDown">↓ <span>Scroll down</span></button>
-          <button type="button" id="quickSound" class="quick-wide" aria-pressed="false">🔇 <span>Sound off</span></button>
+          <button type="button" id="quickKeyboard" class="quick-accent quick-wide"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span>Keyboard</span></button>
+          <button type="button" id="quickHome"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></button>
+          <button type="button" id="quickMonitors"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><span>Monitors</span></button>
+          <button type="button" id="quickScreenshot"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Screenshot</span></button>
+          <button type="button" id="quickRight" title="Right-click at the pointer">Right click</button>
+          <button type="button" id="quickScrollUp">Scroll up</button>
+          <button type="button" id="quickScrollDown">Scroll down</button>
         </div>
+        <!-- The same on/off switches as in the top bar, built by app.js from the same list. -->
+        <div id="quickToggles" class="quick-toggles"></div>
         <div class="quick-options">
-          <label id="quickStreamModeLabel" class="hidden">Mode <select id="quickStreamMode" aria-label="Stream mode"><option value="desktop">Desktop · sharp</option><option value="game">Game · 60 fps</option></select></label>
+          <!-- Short option names: these selects are half a phone wide. -->
+          <label id="quickStreamModeLabel" class="hidden">Mode <select id="quickStreamMode" aria-label="Stream mode"><option value="desktop">Desktop</option><option value="game">Game</option></select></label>
           <label class="game-only">Quality <select id="quickGameHeight" aria-label="Game resolution"><option value="720">720p</option><option value="1080">1080p</option><option value="1440">1440p</option><option value="2160">Native</option></select></label>
-          <label>Screen <select id="quickFit" aria-label="Screen scaling"><option value="fit">Fit · whole desktop</option><option value="fill">Fill · edge to edge</option><option value="stretch">Stretch · distort</option></select></label>
+          <label>Screen <select id="quickFit" aria-label="Screen scaling"><option value="fit">Fit</option><option value="fill">Fill</option><option value="stretch">Stretch</option></select></label>
           <label>Touch <select id="quickMode" aria-label="Touch mode"><option value="direct">Direct touch</option><option value="trackpad">Trackpad</option></select></label>
-          <label class="quick-display-label">Monitor <select id="quickDisplay" aria-label="Monitor"></select></label>
         </div>
         <div class="quick-bottom">
-          <button id="quickReconnect" type="button">↻ Reconnect</button>
+          <button id="quickReconnect" type="button">Reconnect</button>
           <button id="quickExit" type="button">Exit screen mode</button>
         </div>
         <p class="quick-help">Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag; swipe with two fingers to scroll. Fit shows your whole screen; Fill crops its edges.</p>
       </aside>
+      <aside id="monitorSheet" class="sheet monitor-sheet hidden" aria-label="Monitors">
+        <div class="sheet-head"><strong>Monitors</strong><button id="closeMonitors" class="icon-button" type="button" aria-label="Close monitors"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+        <ul id="sheetMonitorList" class="monitor-list"></ul>
+        <p id="sheetMonitorStatus" class="status-line" role="status"></p>
+      </aside>
       <div class="controlbar" id="controlBar" aria-label="Remote controls">
-        <button id="showKeyboard" class="keyboard-trigger" title="Open the on-screen keyboard" aria-controls="keyboardSheet" aria-expanded="false">⌨ <span>Keyboard</span></button>
+        <button id="showKeyboard" class="keyboard-trigger" title="Open the on-screen keyboard" aria-controls="keyboardSheet" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span>Keyboard</span></button>
         <button id="mouseLeft" title="Left click">◉ <span>Click</span></button>
         <button id="mouseRight" title="Right click">◌ <span>Right</span></button>
         <button id="scrollUp" title="Scroll up">↑ <span>Scroll</span></button>
@@ -109,34 +222,40 @@
         <button id="escapeKey" title="Escape">Esc</button><button id="tabKey" title="Tab">Tab</button><button id="enterKey" title="Enter">↵</button><button id="backspaceKey" title="Backspace">⌫</button>
         <button id="ctrlC" title="Copy (Ctrl+C)">Ctrl+C</button><button id="ctrlV" title="Paste (Ctrl+V)">Ctrl+V</button>
       </div>
-      <section id="keyboardSheet" class="keyboard-sheet hidden" aria-label="Remote text entry">
-        <div class="keyboard-sheet-head">
-          <div><span class="keyboard-eyebrow">ABYSS INPUT</span><strong>Type on your desktop</strong></div>
-          <button id="closeKeyboard" class="keyboard-close" aria-label="Close keyboard">✕</button>
-        </div>
+      <section id="keyboardSheet" class="sheet keyboard-sheet hidden" aria-label="Type on the PC">
+        <div class="sheet-head"><strong>Type on your PC</strong><button id="closeKeyboard" class="icon-button" type="button" aria-label="Close keyboard"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
         <p>Click a text field on your PC first, then type here and press Send.</p>
         <textarea id="keyboardText" rows="2" maxlength="2048" placeholder="Type or paste text here…" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Text to type on the connected PC"></textarea>
         <div class="keyboard-actions">
-          <button id="keyboardTab" title="Send Tab key">Tab</button>
-          <button id="keyboardBackspace" title="Send Backspace">⌫</button>
-          <button id="keyboardEnter" title="Send Enter">Enter ↵</button>
-          <button id="keyboardSend" class="primary" title="Type this text into the active PC window">Send text →</button>
+          <button id="keyboardTab" class="button" type="button" title="Send Tab key">Tab</button>
+          <button id="keyboardBackspace" class="button" type="button" title="Send Backspace">⌫</button>
+          <button id="keyboardEnter" class="button" type="button" title="Send Enter">Enter ↵</button>
+          <button id="keyboardSend" class="button primary" type="button" title="Type this text into the active PC window">Send text</button>
         </div>
         <div class="keyboard-actions keyboard-clipboard">
-          <button id="keyboardClipGet" title="Put the PC's clipboard text into the box above">Get PC clipboard</button>
-          <button id="keyboardClipSet" title="Copy the box above to the PC's clipboard">Copy to PC clipboard</button>
+          <button id="keyboardClipGet" class="button" type="button" title="Put the PC's clipboard text into the box above">Get PC clipboard</button>
+          <button id="keyboardClipSet" class="button" type="button" title="Copy the box above to the PC's clipboard">Copy to PC clipboard</button>
         </div>
         <div id="keyboardStatus" class="keyboard-status" role="status" aria-live="polite"></div>
       </section>
       <div class="lowerbar" id="extraTools">
-        <div class="sendline"><input id="textSend" maxlength="2048" placeholder="Type on your PC…" aria-label="Text to send to PC" autocapitalize="off" autocomplete="off" spellcheck="false"><button id="sendText" class="primary small">Send</button></div>
-        <div class="zoomline"><label for="zoom">ZOOM</label><input id="zoom" type="range" min="100" max="250" step="10" value="100"><span id="zoomValue">100%</span><button id="copyPc" class="ghost">Read clipboard</button><button id="pushClipboard" class="ghost">Copy text to PC</button><button id="devicesButton" class="ghost">Devices</button></div>
+        <div class="sendline"><input id="textSend" maxlength="2048" placeholder="Type on your PC…" aria-label="Text to send to PC" autocapitalize="off" autocomplete="off" spellcheck="false" enterkeyhint="send"><button id="sendText" class="button primary" type="button">Send</button></div>
+        <div class="zoomline"><label for="zoom">Zoom</label><input id="zoom" type="range" min="100" max="250" step="10" value="100"><span id="zoomValue">100%</span><button id="copyPc" class="button" type="button">Read clipboard</button><button id="pushClipboard" class="button" type="button">Copy text to PC</button></div>
       </div>
       <div id="remoteError" class="error" role="status"></div>
-      <p class="hint">On phones the desktop takes over the screen; tap the floating Controls button for the keyboard, monitors, touch mode and Fit/Fill. iOS edge gestures stay under Apple’s control.</p>
-      <div id="devicesPanel" class="devices-panel hidden"><h2>Paired devices</h2><div id="devicesList"></div><p>Revoking a device disconnects it immediately. Pairings expire after 30 days.</p></div>
+      <p class="hint">On phones the desktop takes over the screen; tap Controls for the keyboard, monitors, touch mode and Fit or Fill. iOS edge gestures stay under Apple’s control.</p>
     </section>
   </main>
-  <footer>ABYSS REMOTE <span>1.0.0</span><span class="divider-dot">•</span> SELF-HOSTED BY DESIGN</footer>
+  <dialog id="confirmDialog" class="dialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="dialog-box">
+      <h2 id="confirmTitle"></h2>
+      <p id="confirmMessage"></p>
+      <div class="dialog-actions">
+        <button id="confirmNo" class="button" type="button">Cancel</button>
+        <button id="confirmYes" class="button primary" type="button"></button>
+      </div>
+    </div>
+  </dialog>
+  <footer>Abyss Remote <span>1.0.0</span></footer>
 </body>
 </html>
