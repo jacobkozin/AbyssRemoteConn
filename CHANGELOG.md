@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.1.0 — 2026-11-14
+
+Windows app
+- Abyss Remote is now a Windows app with a window and a tray icon instead of a console. The
+  program is `AbyssRemote.exe` (was `AbyssRemote.Host.exe`). The window shows the address, the
+  pairing code, paired devices, a "Phone setup" checklist and the settings.
+- QR code in home-network mode: scanning it opens the address with the pairing code filled in.
+- Settings are saved (`preferences.json`): home-network mode, port, keep running in the tray.
+  "Start with Windows" is a separate switch, off by default. One copy runs at a time; a
+  second start shows the running window.
+- New options `--local`, `--console` (the old console screen) and `--minimized`.
+- `GET /AbyssRemote-RootCA.cer` lets a phone download the root certificate's public part; the
+  window shows the fingerprint to compare.
+- New app icon (`tools/make_icon.ps1`) and `CREATE-DESKTOP-SHORTCUT.bat`.
+
+Browser client
+- New home screen after pairing: monitors, Steam games, files, lock and sleep, clipboard,
+  paired devices. Reworked pairing screen with help for the first time on a phone.
+- Monitor picker with model names, refresh rates and live previews, also inside a stream.
+  Monitor numbers are fixed now: the primary monitor is 0, the others follow left to right.
+- Screenshot: save a full-resolution picture of a monitor.
+- Watch only: see and hear the PC without sending any input.
+- Special keys (Ctrl, Alt, Shift and Win that stay held, Esc, Tab, Del, Ins, Home, End, PgUp,
+  PgDn, arrows, PrtSc, F1–F12) and one-tap shortcuts in the keyboard sheet; pinch zoom with
+  two fingers.
+
+Steam, files and the PC
+- Steam library: installed games with cover art; start a game or Big Picture from the browser.
+- File transfer through one folder, `Downloads\Abyss Remote`: send, download, delete, up to
+  2 GB per file, nothing overwritten.
+- Lock the PC or put it to sleep.
+
+Streaming and controllers
+- The bitrate can change while streaming (`bitrate <kbps>` on the video socket). New default
+  "Automatic (2–35 Mbps)", which follows the delivery time.
+- Controller rumble: vibration from the game is sent to the browser and played on the physical
+  controller.
+- On-screen gamepad ("Touch gamepad") for phones and tablets.
+
+Security
+- Every new route that changes or does something on the PC needs cookie + exact Origin + CSRF.
+- File names are checked and matched against a folder listing, never turned into paths;
+  uploads carry the download mark; downloads are always sent as attachments.
+- Host actions are a fixed list of two. A Steam game is started only by the number of an
+  installed game, with `steam.exe` run directly and no shell.
+- The pairing code in a QR address is a fragment, removed from the address bar at once.
+- Sockets get close code 1012 when the host stops or restarts, so browsers reconnect.
+- See docs/SECURITY.md for the new risks.
+
+Tooling
+- The local build now makes a small `AbyssRemote.exe` (under 1 MB) that runs on the installed
+  .NET 10 runtime and downloads nothing. `BUILD-WINDOWS.bat -SelfContained` or
+  `BUILD-AND-TEST.bat -SelfContained` makes the standalone program (about 135 MB), which is
+  what the GitHub Actions build produces.
+- 414 tests pass and 2 are skipped (was 102); eight Node check files (was one); a demo server
+  for trying the browser client against pretend monitors, games and files; `--ui-snapshot`
+  draws the window to PNG files.
+
+Not yet tested
+- Anything on a real iPhone, iPad or touch screen, including scanning the QR code.
+- Home-network mode on the development PC.
+- Controllers, the on-screen gamepad in a game and rumble: ViGEmBus is not installed there.
+- Lock, sleep, starting a Steam game and Big Picture for real.
+- Mouse and keyboard on the real desktop through the reworked client (verified live for 1.0).
+- The GitHub Actions workflow since the rename (the standalone build passed its self-test once
+  on the development PC).
+
 ## 1.0.0
 
 Security
