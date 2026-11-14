@@ -362,9 +362,10 @@ public sealed class FileTransferAttackTests
         var never = new TaskCompletionSource();
         var sending = _client.Http.SendAsync(Upload("holiday video.mp4", new StalledUpload(new byte[5000], never.Task, declaredLength)), cancel.Token);
 
-        await Wait.UntilAsync(() => Partials().Length == 1);
+        // An unfinished upload is hidden on the PC. The file is created first and hidden a
+        // moment later, so wait for both instead of looking in between.
+        await Wait.UntilAsync(() => Partials().Length == 1 && File.GetAttributes(Partials()[0]).HasFlag(FileAttributes.Hidden));
         string partial = Partials()[0];
-        Assert.IsTrue(File.GetAttributes(partial).HasFlag(FileAttributes.Hidden), "an unfinished upload is hidden on the PC");
 
         // While it is arriving, no device can see, fetch or delete it.
         Assert.AreEqual(0, (await _client.Http.GetFromJsonAsync<JsonElement>("/api/v1/files")).GetProperty("files").GetArrayLength());
