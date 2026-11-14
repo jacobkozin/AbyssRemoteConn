@@ -235,6 +235,7 @@ public sealed class TestServer : IAsyncDisposable
         await _app.StopAsync();
         await _app.DisposeAsync();
         _certificate.Dispose();
+        Steam.Dispose();
         try { Directory.Delete(_dataDir, recursive: true); } catch (IOException) { }
     }
 

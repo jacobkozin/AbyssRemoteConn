@@ -56,7 +56,8 @@ public static class SmokeTest
                     "the root certificate download is the public certificate only");
             }
 
-            foreach (var route in new[] { "/api/v1/me", "/api/v1/displays", "/api/v1/devices", "/api/v1/health", "/api/v1/clipboard" })
+            foreach (var route in new[] { "/api/v1/me", "/api/v1/displays", "/api/v1/devices", "/api/v1/health", "/api/v1/clipboard",
+                         "/api/v1/displays/0/preview", "/api/v1/displays/0/screenshot", "/api/v1/files", "/api/v1/actions", "/api/v1/steam" })
             {
                 using var reply = await http.GetAsync(route);
                 Check(reply.StatusCode == HttpStatusCode.Unauthorized, $"anonymous GET {route} is refused (401)");
