@@ -4,23 +4,30 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using AbyssRemote.Host.App;
 
 namespace AbyssRemote.Host;
 
-/// <summary><c>AbyssRemote.Host.exe --smoke-test</c>: starts the REAL published host (real
+/// <summary><c>AbyssRemote.exe --smoke-test</c>: starts the REAL published host (real
 /// certificate, real web UI, real middleware) on a free loopback port and checks it from the
 /// outside. The test client trusts only the exact certificate this process presents; it never
 /// changes system or browser trust.</summary>
 public static class SmokeTest
 {
-    public static async Task<int> RunAsync(WebApplication app, X509Certificate2 certificate)
+    public static async Task<int> RunAsync(HostRuntime runtime, bool renewCertificate)
     {
         Console.WriteLine("SELF-TEST: starting the HTTPS host on a free loopback port...");
-        await app.StartAsync();
+        // Port 0 = a free port picked by Windows, so the test never collides with a running host.
+        var status = await runtime.StartAsync(new HostRunOptions(Lan: false, Port: 0, renewCertificate));
+        if (status.Running is not { } running)
+        {
+            Console.Error.WriteLine($"SELF-TEST FAILED: {status.Problem!.Message}");
+            return 1;
+        }
         try
         {
-            var baseUri = new Uri(app.Urls.First());
-            byte[] pinned = certificate.GetCertHash(HashAlgorithmName.SHA256);
+            var baseUri = new Uri(running.LocalUrl);
+            byte[] pinned = Convert.FromHexString(running.ServerFingerprint);
             bool Pinned(X509Certificate2? presented) =>
                 presented is not null && CryptographicOperations.FixedTimeEquals(presented.GetCertHash(HashAlgorithmName.SHA256), pinned);
             using var handler = new HttpClientHandler
@@ -39,6 +46,14 @@ public static class SmokeTest
                 Check(home.StatusCode == HttpStatusCode.OK && html.Contains(AppInfo.Name), "the browser UI is served");
                 Check(home.Headers.Contains("Content-Security-Policy") && home.Headers.GetValues("X-Frame-Options").Single() == "DENY",
                     "security headers (CSP, X-Frame-Options) are present");
+            }
+
+            using (var download = await http.GetAsync("/AbyssRemote-RootCA.cer"))
+            {
+                byte[] file = await download.Content.ReadAsByteArrayAsync();
+                using var certificate = X509CertificateLoader.LoadCertificate(file);
+                Check(download.StatusCode == HttpStatusCode.OK && file.AsSpan().SequenceEqual(running.RootCertificate) && !certificate.HasPrivateKey,
+                    "the root certificate download is the public certificate only");
             }
 
             foreach (var route in new[] { "/api/v1/me", "/api/v1/displays", "/api/v1/devices", "/api/v1/health", "/api/v1/clipboard" })
@@ -91,7 +106,7 @@ public static class SmokeTest
         }
         finally
         {
-            await app.StopAsync();
+            await runtime.StopAsync();
         }
     }
 

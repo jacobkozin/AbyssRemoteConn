@@ -12,6 +12,7 @@ public static class CloseCodes
     public const int Replaced = 4008;     // a newer connection from the same device took over
     public const int Busy = 4029;         // host-wide connection limit reached
     public const int Unsupported = 4415;  // e.g. no hardware video encoder on this PC
+    public const int Restart = 1012;      // standard "service restart": the browser reconnects by itself
 }
 
 /// <summary>A WebSocket whose sends are serialized, so other code (revocation, replacement)
@@ -116,9 +117,30 @@ public sealed class SessionRegistry
 
     public int Count(SocketKind kind) { lock (_sync) return _entries.Count(e => e.Kind == kind); }
 
+    /// <summary>The devices that have at least one live connection right now. Read-only: the
+    /// host window uses it to mark which paired devices are connected.</summary>
+    public IReadOnlySet<string> ConnectedDeviceIds()
+    {
+        lock (_sync) return _entries.Select(e => e.DeviceId).ToHashSet();
+    }
+
     public void CloseDevice(string deviceId) => CloseWhere(e => e.DeviceId == deviceId);
 
     public void CloseAll() => CloseWhere(_ => true);
+
+    /// <summary>Closes every socket because the server is stopping or restarting (a changed
+    /// port or network mode), not because a device was revoked. That close code makes
+    /// browsers reconnect by themselves instead of asking to pair again.</summary>
+    public void CloseAllForRestart()
+    {
+        List<Entry> closing;
+        lock (_sync)
+        {
+            closing = _entries.ToList();
+            _entries.Clear();
+        }
+        foreach (var e in closing) _ = e.Socket.CloseAsync(CloseCodes.Restart, "The host is restarting");
+    }
 
     private void CloseWhere(Func<Entry, bool> match)
     {

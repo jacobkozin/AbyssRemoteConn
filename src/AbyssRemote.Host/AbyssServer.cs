@@ -13,6 +13,10 @@ public sealed class ServerContext
 {
     public required LaunchOptions Options { get; init; }
     public required X509Certificate2 Certificate { get; init; }
+    /// <summary>The root certificate that signed <see cref="Certificate"/>. Phones download its
+    /// public part to trust this host. Null when there is no separate root (a test server with
+    /// one self-signed certificate).</summary>
+    public X509Certificate2? RootCertificate { get; init; }
     public required StateStore State { get; init; }
     public required PairingManager Pairing { get; init; }
     public required RequestProtection Protection { get; init; }
@@ -114,6 +118,13 @@ public static class AbyssServer
 
         app.MapGet("/api/v1/info", () => Results.Ok(new { app = AppInfo.Name, version = AppInfo.Version }));
 
+        // The root certificate a phone has to trust before its browser accepts this host. No
+        // pairing needed: Export(Cert) writes the public certificate only, never the private
+        // key, and it is the same file the PC keeps in %LOCALAPPDATA%\AbyssRemote.
+        app.MapGet("/AbyssRemote-RootCA.cer", () => c.RootCertificate is null
+            ? Results.NotFound()
+            : Results.File(c.RootCertificate.Export(X509ContentType.Cert), "application/x-x509-ca-cert", "AbyssRemote-RootCA.cer"));
+
         app.MapPost("/api/v1/pair", IResult (HttpContext ctx, PairRequest request) =>
         {
             if (!RequestProtection.SameOrigin(ctx)) return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -129,9 +140,9 @@ public static class AbyssServer
                 case PairingResult.TooManyAttempts:
                     return Results.Json(new { error = "Too many tries from this device. Wait 5 minutes, then try again." }, statusCode: StatusCodes.Status429TooManyRequests);
                 case PairingResult.Locked:
-                    return Results.BadRequest(new { error = "Pairing is locked after too many wrong codes. Press P on the PC for a new code." });
+                    return Results.BadRequest(new { error = "Pairing is locked after too many wrong codes. Click New code in Abyss Remote on the PC." });
                 default:
-                    return Results.BadRequest(new { error = "That code is wrong or expired. Check the PC, or press P there for a new code." });
+                    return Results.BadRequest(new { error = "That code is wrong or expired. Check the PC, or click New code in Abyss Remote there." });
             }
             var (id, secret) = c.State.Pair(label);
             c.Notice($"Paired a new device: \"{label}\" from {address}.");

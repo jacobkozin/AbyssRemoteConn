@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe: double-clicking the program opens its window instead of a console. The
+         console-style options (smoke-test, probe-video, console) connect to the console of
+         whoever started them; see App/ConsoleWindow.cs. -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
@@ -8,11 +11,28 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultContentItems>true</EnableDefaultContentItems>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <AssemblyName>AbyssRemote.Host</AssemblyName>
+    <!-- The program is AbyssRemote.exe; the code keeps the AbyssRemote.Host namespace. -->
+    <AssemblyName>AbyssRemote</AssemblyName>
+    <RootNamespace>AbyssRemote.Host</RootNamespace>
     <Version>1.0.0</Version>
+    <!-- Shown by Windows in the file's Properties, in Task Manager and in notifications. -->
+    <Product>Abyss Remote</Product>
+    <AssemblyTitle>Abyss Remote</AssemblyTitle>
+    <Description>See and control this PC from a phone, tablet or another computer on your home network.</Description>
+    <Company>Abyss Remote contributors</Company>
+    <Copyright>Copyright (c) 2026 Abyss Remote contributors</Copyright>
+  </PropertyGroup>
+  <PropertyGroup Condition="Exists('Assets\AbyssRemote.ico')">
+    <ApplicationIcon>Assets\AbyssRemote.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Content Update="wwwroot/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The same icon inside the program, for the window and the tray (see App/AppIcon.cs). -->
+    <EmbeddedResource Include="Assets\AbyssRemote.ico" LogicalName="AbyssRemote.ico" Condition="Exists('Assets\AbyssRemote.ico')" />
+    <!-- The firewall helper travels with the program, so the window's "Add firewall rule"
+         button also works when only the published folder was copied somewhere. -->
+    <None Include="..\..\ENABLE-LAN-FIREWALL.bat" Link="ENABLE-LAN-FIREWALL.bat" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\scripts\Firewall-Enable-LAN.ps1" Link="scripts\Firewall-Enable-LAN.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="AbyssRemote.Tests" />
   </ItemGroup>
 </Project>

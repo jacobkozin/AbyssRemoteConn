@@ -27,8 +27,40 @@ public sealed class LaunchOptionsTests
     [DataRow("--port", "70000")]
     [DataRow("--port", "abc")]
     [DataRow("--lam")] // typo must not silently start in some other mode
+    [DataRow("--lan", "--local")] // contradicts itself
+    [DataRow("--ui-snapshot")]
+    [DataRow("--ui-snapshot", "--lan")]
     public void BadOptionsAreErrors(params string[] args) =>
         Assert.ThrowsExactly<ArgumentException>(() => LaunchOptions.Parse(args));
+
+    [TestMethod]
+    public void TheWindowIsTheDefaultAndConsoleModeIsExplicit()
+    {
+        var plain = LaunchOptions.Parse([]);
+        Assert.IsFalse(plain.ConsoleMode || plain.Minimized || plain.LocalOnly || plain.PortGiven || plain.SmokeTest || plain.ProbeVideo);
+        Assert.IsNull(plain.UiSnapshotFolder);
+
+        Assert.IsTrue(LaunchOptions.Parse(["--console"]).ConsoleMode);
+        Assert.IsTrue(LaunchOptions.Parse(["--MINIMIZED"]).Minimized, "what \"Start with Windows\" passes");
+        Assert.IsTrue(LaunchOptions.Parse(["--local"]).LocalOnly);
+        Assert.AreEqual(@"C:\Temp\shots", LaunchOptions.Parse(["--ui-snapshot", @"C:\Temp\shots"]).UiSnapshotFolder);
+    }
+
+    [TestMethod]
+    public void AnExplicitPortIsToldApartFromTheDefault()
+    {
+        Assert.IsFalse(LaunchOptions.Parse(["--lan"]).PortGiven);
+        var given = LaunchOptions.Parse(["--port", "8444"]);
+        Assert.IsTrue(given.PortGiven, "--port 8444 overrides a saved port even though 8444 is the default");
+        Assert.AreEqual(8444, given.Port);
+    }
+
+    [TestMethod]
+    public void TheOlderOptionsStillParseAsBefore()
+    {
+        var options = LaunchOptions.Parse(["--lan", "--port", "8555", "--renew-cert", "--smoke-test", "--probe-video"]);
+        Assert.AreEqual(new LaunchOptions(Lan: true, Port: 8555, RenewCert: true, SmokeTest: true, ProbeVideo: true) { PortGiven = true }, options);
+    }
 }
 
 [TestClass]
