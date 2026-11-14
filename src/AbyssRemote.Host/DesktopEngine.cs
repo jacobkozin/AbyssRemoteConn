@@ -10,13 +10,17 @@ namespace AbyssRemote.Host;
 /// <summary>The real Windows desktop: GDI capture, SendInput and the clipboard.</summary>
 public sealed class DesktopEngine : IDesktop
 {
-    /// <summary>Numbering and geometry come from Screen.AllScreens alone. The model name and
-    /// refresh rate are looked up separately and only decorate that list, so a monitor Windows
-    /// cannot describe still appears, as "Monitor 2".</summary>
+    /// <summary>Monitors in a fixed order: the primary one is always 0, the others follow from
+    /// left to right (top to bottom when two share a column). Windows lists them in an order that
+    /// can change between restarts, and a phone that remembers "monitor 1" should get the same
+    /// screen next time. Geometry comes from Screen.AllScreens alone. The model name and refresh
+    /// rate are looked up separately and only decorate that list, so a monitor Windows cannot
+    /// describe still appears, as "Monitor 2".</summary>
     public IReadOnlyList<DisplayInfo> Displays()
     {
         var details = Features.MonitorCatalog.Current();
-        return Screen.AllScreens.Select((s, i) =>
+        var screens = Screen.AllScreens.OrderByDescending(s => s.Primary).ThenBy(s => s.Bounds.Left).ThenBy(s => s.Bounds.Top);
+        return screens.Select((s, i) =>
         {
             details.TryGetValue(s.DeviceName, out var monitor);
             string friendlyName = monitor is { FriendlyName.Length: > 0 } ? monitor.FriendlyName : $"Monitor {i + 1}";
