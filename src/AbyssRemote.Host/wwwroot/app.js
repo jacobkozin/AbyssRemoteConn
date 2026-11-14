@@ -7,6 +7,8 @@ import { startJpegStream } from './jpeg-stream.js';
 import { startVideoStream, gameModeSupported } from './video-stream.js';
 import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
 import { watchGamepads } from './gamepad.js';
+import { controllerRumble } from './rumble.js';
+import { installTouchPad, pinchZoom, shortcutSteps } from './touch-controls.js';
 import { api, fetchFile, refreshIdentity, session } from './api.js';
 import { $, el, icon, saveBlob } from './dom.js';
 import { fileNameFromDisposition } from './format.js';
@@ -28,7 +30,7 @@ const WATCHING = 'Watch only is on. Turn it off to control the PC.';
 // what gets remembered (numbers change when monitors are plugged in or rearranged).
 // `watchOnly` stops every kind of input from being sent.
 const state = {
-  active: false, stopped: false, watchOnly: false, monitorsOpen: false,
+  active: false, stopped: false, watchOnly: false, monitorsOpen: false, touchPad: false,
   mode: 'desktop', gameAvailable: false, fallbackNotice: '', soundOn: false, audio: null,
   displays: [], display: 0, displayName: null,
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
@@ -253,6 +255,12 @@ function connect() {
 // the top bar and one in the phone's Controls panel, so a new switch (an on-screen gamepad,
 // special keys) only has to be added here.
 const toggles = [
+  { id: 'touchpad', icon: 'keyboard', label: 'Touch gamepad', hint: 'On-screen controller; needs ViGEmBus on the PC',
+    isOn: () => state.touchPad, flip: () => {
+      releaseAllInput(); state.touchPad = !state.touchPad;
+      $('touchPad').classList.toggle('hidden', !state.touchPad);
+      gamepads.resync(); syncToggles(); setQuickMenu(false);
+    } },
   { id: 'watch', icon: 'eye', label: 'Watch only', hint: 'Look without sending mouse, keyboard or controller input',
     isOn: () => state.watchOnly, flip: () => setWatchOnly(!state.watchOnly) },
   { id: 'sound', icon: 'sound', label: 'Sound', hint: "Play the PC's sound on this device",
@@ -400,10 +408,11 @@ function openVideo(epoch) {
     onClose: (code, reason) => { if (epoch === state.epoch) connectionLost('video', code, reason); },
   };
   if (state.mode === 'game') {
-    const query = `display=${state.display}&fps=${$('gameFpsPick').value}&height=${$('gameHeightPick').value}&bitrate=${$('bitratePick').value}`;
+    const query = `display=${state.display}&fps=${$('gameFpsPick').value}&height=${$('gameHeightPick').value}&bitrate=${$('bitratePick').value === 'auto' ? 20000 : $('bitratePick').value}`;
     state.stream = startVideoStream({
       ...common,
       url: wsUrl(`/api/v1/video?${query}`),
+      automaticBitrate: $('bitratePick').value === 'auto',
       onConfig: (config) => {
         if (epoch !== state.epoch) return;
         state.desktopWidth = config.desktopWidth;
@@ -492,6 +501,7 @@ function controlMessage(text) {
   let message;
   try { message = JSON.parse(text); } catch { return; }
   if (message.type === 'notice') showError(message.message || '');
+  if (message.type === 'rumble') rumble.receive(message);
 }
 
 // ---------------------------------------------------------------- drawing
@@ -658,6 +668,9 @@ function mouseClick(button = 0) { send('mouse', { button, action: 'down' }); sen
 // connection is holding, so nothing stays stuck down on the PC.
 function releaseAllInput(notifyHost = true) {
   state.pressedKeys.clear();
+  touchPad.reset();
+  rumble.reset();
+  for (const button of document.querySelectorAll('[data-special-key]')) button.setAttribute('aria-pressed', 'false');
   resetTouchGesture();
   if (notifyHost) send('release');
 }
@@ -683,6 +696,7 @@ function absolutePointer(event) {
 let dragging = false, touchedAt = 0, travel = 0, sentAt = 0;
 let dragButton = null, holdTimer = null, rightHoldTimer = null;
 let dragReady = false, rightHeld = false, gesturePanning = false;
+let pinchStartDistance = 0, pinchStartZoom = 100, pinching = false;
 let twoFingerStart = 0, twoFingerMoved = false, twoFingerTravel = 0, twoFingerCenter = null;
 const touches = new Map();
 function clearTouchTimers() {
@@ -695,6 +709,7 @@ function releaseDrag() {
   dragButton = null;
 }
 function resetTouchGesture() {
+  pinchStartDistance = 0; pinching = false;
   touches.clear(); gesturePanning = false; twoFingerStart = 0;
   twoFingerMoved = false; twoFingerTravel = 0; twoFingerCenter = null; rightHeld = false;
   releaseDrag(); dragging = false;
@@ -745,6 +760,8 @@ desktop.addEventListener('pointerdown', (event) => {
       if (touches.size === 2) {
         const pair = Array.from(touches.values());
         twoFingerCenter = { x: (pair[0].x + pair[1].x) / 2, y: (pair[0].y + pair[1].y) / 2 };
+        pinchStartDistance = Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
+        pinchStartZoom = state.zoom; pinching = false;
         twoFingerStart = Date.now(); twoFingerMoved = false; twoFingerTravel = 0;
       } else twoFingerMoved = true;
       gesturePanning = true;
@@ -778,6 +795,17 @@ desktop.addEventListener('pointermove', (event) => {
     const previous = touches.get(event.pointerId);
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (gesturePanning) {
+      if (touches.size === 2 && pinchStartDistance > 0) {
+        const pair = [...touches.values()];
+        const distance = Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
+        if (Math.abs(distance - pinchStartDistance) > 12) pinching = true;
+        if (pinching) {
+          twoFingerMoved = true;
+          state.zoom = pinchZoom(pinchStartZoom, pinchStartDistance, distance);
+          $('zoom').value = String(state.zoom); $('zoomValue').textContent = state.zoom + '%';
+          updateScreenLayout(); scheduleResolutionRefresh(); return;
+        }
+      }
       const deltaY = event.clientY - previous.y;
       const deltaX = event.clientX - previous.x;
       twoFingerTravel += Math.abs(deltaX) + Math.abs(deltaY);
@@ -1131,8 +1159,26 @@ $('keyboardClipSet').addEventListener('click', async () => {
 });
 
 // Controllers work in both modes; the host answers with a notice if its driver is missing.
+const rumble = controllerRumble(() => state.active && !state.stopped && !state.watchOnly && !state.touchPad && !document.hidden && document.hasFocus() && state.control?.readyState === WebSocket.OPEN);
+const touchPad = installTouchPad($('touchPad'), send, () => state.active && !state.stopped && !state.watchOnly && state.touchPad);
+for (const button of document.querySelectorAll('[data-special-key]')) {
+  button.addEventListener('click', () => {
+    if (!state.active || state.watchOnly) return;
+    const code = button.dataset.specialKey;
+    if (button.dataset.hold === 'true') {
+      const down = button.getAttribute('aria-pressed') !== 'true';
+      key(code, down ? 'down' : 'up'); button.setAttribute('aria-pressed', String(down));
+    } else tapKey(code);
+  });
+}
+for (const button of document.querySelectorAll('[data-combo]')) {
+  button.addEventListener('click', () => {
+    if (!state.active || state.watchOnly) return;
+    for (const step of shortcutSteps(button.dataset.combo)) key(step.code, step.action);
+  });
+}
 const gamepads = watchGamepads({
-  send: (kind, data) => state.active && send(kind, data),
+  send: (kind, data) => state.active && !state.touchPad && !document.hidden && send(kind, data),
   onChange: (names) => {
     if (names.length) $('quickStatus').textContent = `${names.length} controller${names.length > 1 ? 's' : ''} connected`;
   },

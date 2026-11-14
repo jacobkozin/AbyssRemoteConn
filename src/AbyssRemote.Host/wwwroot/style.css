@@ -290,3 +290,45 @@ body.immersive .sheet {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* On-screen gamepad, laid out like a controller over the picture. Only the controls take
+   touches; everywhere else the picture underneath still gets them, so the mouse keeps working. */
+.touch-pad { position: fixed; z-index: 8; inset: 0; pointer-events: none; display: grid;
+  grid-template-columns: auto 1fr auto; grid-template-rows: auto 1fr auto;
+  grid-template-areas: "lsh . rsh" ". . ." "left mid right";
+  padding: calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(76px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.touch-pad > * { pointer-events: auto; }
+.pad-shoulder { display: flex; gap: 8px; }
+.pad-shoulder-left { grid-area: lsh; }
+.pad-shoulder-right { grid-area: rsh; }
+.pad-cluster { display: flex; align-items: flex-end; gap: 14px; }
+.pad-left { grid-area: left; }
+.pad-right { grid-area: right; }
+.pad-middle { grid-area: mid; align-self: end; justify-self: center; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 0 8px; }
+.touch-pad button { min-width: 48px; min-height: 44px; padding: 0 10px; border: 1px solid #e6edf759; border-radius: 12px; background: #131a2a8c; color: var(--text); font: inherit; font-weight: 600; touch-action: none; }
+.touch-pad button.held { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.pad-shoulder button { min-width: 64px; min-height: 48px; }
+.pad-middle button { min-width: 52px; min-height: 40px; font-size: 13px; }
+.pad-stick { position: relative; flex: none; width: 112px; height: 112px; border: 2px solid #e6edf766; border-radius: 50%; background: #131a2a66; touch-action: none; }
+.pad-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: #38bdf8bf; pointer-events: none; transform: translate(calc(var(--x, 0) * 32px), calc(var(--y, 0) * 32px)); }
+.pad-cross { flex: none; display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); }
+.pad-cross button { min-width: 0; min-height: 0; padding: 0; }
+.pad-face button { border-radius: 50%; }
+.pad-up { grid-area: 1 / 2; }
+.pad-west { grid-area: 2 / 1; }
+.pad-east { grid-area: 2 / 3; }
+.pad-down { grid-area: 3 / 2; }
+@media (orientation: portrait) {
+  /* Upright phones: the controller stays in the lower part, under the picture. */
+  .touch-pad { top: auto; height: min(60dvh, 430px); }
+  .pad-cluster { flex-direction: column; align-items: center; }
+  .pad-right { flex-direction: column-reverse; }
+}
+@media (orientation: landscape) and (max-height: 430px) {
+  .pad-stick { width: 96px; height: 96px; }
+  .pad-cross { grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(3, 42px); }
+}
+.special-keys { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }
+.special-keys button { min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); color: var(--text); font: inherit; }
+.special-keys button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--bg); }
