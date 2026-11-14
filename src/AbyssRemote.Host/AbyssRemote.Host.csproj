@@ -21,6 +21,9 @@
     <Description>See and control this PC from a phone, tablet or another computer on your home network.</Description>
     <Company>Abyss Remote contributors</Company>
     <Copyright>Copyright (c) 2026 Abyss Remote contributors</Copyright>
+    <!-- WFO1000 asks how the Windows Forms designer should save each control property. The
+         window is built in code (App/MainWindow.cs); there are no designer files. -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="Exists('Assets\AbyssRemote.ico')">
     <ApplicationIcon>Assets\AbyssRemote.ico</ApplicationIcon>
