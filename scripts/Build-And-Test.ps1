@@ -1,5 +1,7 @@
-# One-command build: unit + integration tests, browser client checks, self-contained
-# publish to dist\win-x64\AbyssRemote.exe, then the published program's own HTTPS self-test.
+# One-command build: unit + integration tests, browser client checks, publish to
+# dist\win-x64\AbyssRemote.exe, then the published program's own HTTPS self-test.
+# -SelfContained publishes the standalone program (see Build-Windows.ps1); the GitHub build passes it.
+param([switch]$SelfContained)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
@@ -27,7 +29,7 @@ if ($node) {
 }
 
 Step 'Publish'
-& (Join-Path $PSScriptRoot 'Build-Windows.ps1')
+& (Join-Path $PSScriptRoot 'Build-Windows.ps1') -SelfContained:$SelfContained
 
 Step 'HTTPS self-test of the published program'
 & (Join-Path $PSScriptRoot 'Smoke-Test.ps1')

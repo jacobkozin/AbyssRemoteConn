@@ -1,4 +1,10 @@
-param([switch]$NoSingleFile)
+# Publishes Abyss Remote to dist\win-x64\AbyssRemote.exe.
+# Default: a small program that runs on the .NET 10 runtime installed on this PC. Nothing is
+# downloaded, because the project has no packages of its own.
+# -SelfContained: a standalone program with the .NET runtime inside it (about 135 MB), for PCs
+# without .NET. The first such build fetches Microsoft's runtime packs from nuget.org. The
+# GitHub build uses it.
+param([switch]$NoSingleFile, [switch]$SelfContained)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'Source-Fingerprint.ps1')
@@ -16,7 +22,20 @@ New-Item -ItemType Directory -Path $destination -Force | Out-Null
 # The program was called AbyssRemote.Host.exe before it became a windowed app; do not leave the old one behind.
 Get-ChildItem -LiteralPath $destination -Filter 'AbyssRemote.Host.*' -File | Remove-Item -Force
 Write-Host "Publishing Abyss Remote to $destination" -ForegroundColor Cyan
-$args = @('publish', $project, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $destination, '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true')
+if ($SelfContained) {
+    Write-Host 'Standalone build: the .NET runtime goes inside the program.' -ForegroundColor Cyan
+    $args = @('publish', $project, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $destination, '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true')
+} else {
+    # The program will use the runtime that is installed here, so make sure it is.
+    $runtimes = (& dotnet --list-runtimes) -join "`n"
+    foreach ($name in 'Microsoft.NETCore.App', 'Microsoft.AspNetCore.App', 'Microsoft.WindowsDesktop.App') {
+        if ($runtimes -notmatch "(?m)^$([regex]::Escape($name)) 10\.") {
+            throw "The .NET 10 runtime part '$name' is not installed on this PC. Install the .NET 10 SDK (or Desktop Runtime plus ASP.NET Core Runtime), or build a standalone program instead: BUILD-WINDOWS.bat -SelfContained"
+        }
+    }
+    # The single-file analyzer comes from a NuGet package; without it this build needs no download.
+    $args = @('publish', $project, '-c', 'Release', '-r', 'win-x64', '-p:SelfContained=false', '-o', $destination, '-p:PublishSingleFile=true', '-p:EnableSingleFileAnalyzer=false')
+}
 if ($NoSingleFile) { $args = @($args | Where-Object { $_ -ne '-p:PublishSingleFile=true' }) + '-p:PublishSingleFile=false' }
 & dotnet @args
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit code $LASTEXITCODE)" }
