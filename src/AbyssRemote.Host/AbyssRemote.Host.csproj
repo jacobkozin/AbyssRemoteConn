@@ -14,7 +14,7 @@
     <!-- The program is AbyssRemote.exe; the code keeps the AbyssRemote.Host namespace. -->
     <AssemblyName>AbyssRemote</AssemblyName>
     <RootNamespace>AbyssRemote.Host</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <!-- Shown by Windows in the file's Properties, in Task Manager and in notifications. -->
     <Product>Abyss Remote</Product>
     <AssemblyTitle>Abyss Remote</AssemblyTitle>
