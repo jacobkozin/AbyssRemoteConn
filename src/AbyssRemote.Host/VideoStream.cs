@@ -8,7 +8,7 @@ namespace AbyssRemote.Host;
 
 /// <summary>Game-mode video protocol over one WebSocket (see docs/API.md).
 /// <para>Host to browser: a JSON <c>config</c> message (codec string, size) before the first
-/// frame; binary frames = 12-byte header + H.264 Annex B; JSON <c>cursor</c>, <c>cursorImage</c>,
+/// frame; binary frames = 12-byte header + H.264 in AVCC form; JSON <c>cursor</c>, <c>cursorImage</c>,
 /// <c>unavailable</c>/<c>resumed</c> and once-a-second <c>stats</c>.</para>
 /// <para>Browser to host: <c>ack &lt;frame id&gt;</c> after each decoded frame (one credit of flow
 /// control, at most <see cref="FramesInFlight"/> outstanding) and <c>key</c> to ask for a keyframe.</para></summary>

@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace AbyssRemote.Host.GameMode;
 
-/// <summary><c>AbyssRemote.Host.exe --probe-video</c>: checks Game mode on every monitor without
+/// <summary><c>AbyssRemote.exe --probe-video</c>: checks Game mode on every monitor without
 /// a browser. For each monitor it builds the real pipeline, encodes for a few seconds (repeating
 /// the image when the screen is still, so the encoder is actually exercised) and prints timings.</summary>
 public static class VideoProbe
