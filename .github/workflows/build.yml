@@ -21,7 +21,9 @@ jobs:
         with:
           node-version: '22'
       # The same script BUILD-AND-TEST.bat runs: .NET unit + integration tests, browser
-      # client checks, self-contained publish, then the published host's HTTPS self-test.
+      # client checks, self-contained publish, then the published program's HTTPS self-test.
+      # AbyssRemote.exe is a windowed program; scripts/Run-Host.ps1 waits for it and passes
+      # its output and exit code on, so a failed self-test fails this step.
       - name: Build and test
         shell: powershell
         run: ./scripts/Build-And-Test.ps1

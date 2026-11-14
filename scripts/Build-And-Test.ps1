@@ -1,5 +1,5 @@
 # One-command build: unit + integration tests, browser client checks, self-contained
-# publish to dist\win-x64, then the published host's own HTTPS self-test.
+# publish to dist\win-x64\AbyssRemote.exe, then the published program's own HTTPS self-test.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
@@ -17,8 +17,11 @@ if ($LASTEXITCODE -ne 0) { throw "Tests failed (exit code $LASTEXITCODE)." }
 Step 'Browser client checks'
 $node = Get-Command node -ErrorAction SilentlyContinue
 if ($node) {
-    & node (Join-Path $root 'tests\web\client-checks.mjs')
-    if ($LASTEXITCODE -ne 0) { throw "Browser client checks failed (exit code $LASTEXITCODE)." }
+    # Every tests\web\*-checks.mjs file is a standalone check.
+    foreach ($check in Get-ChildItem -LiteralPath (Join-Path $root 'tests\web') -Filter '*-checks.mjs' | Sort-Object Name) {
+        & node $check.FullName
+        if ($LASTEXITCODE -ne 0) { throw "Browser client checks failed: $($check.Name) (exit code $LASTEXITCODE)." }
+    }
 } else {
     Write-Host 'Skipped: Node.js is not installed (the .NET tests above still ran).' -ForegroundColor Yellow
 }
@@ -26,5 +29,5 @@ if ($node) {
 Step 'Publish'
 & (Join-Path $PSScriptRoot 'Build-Windows.ps1')
 
-Step 'HTTPS self-test of the published host'
+Step 'HTTPS self-test of the published program'
 & (Join-Path $PSScriptRoot 'Smoke-Test.ps1')
