@@ -152,8 +152,36 @@ internal sealed class WindowApp : IWindowActions
             _checkingSetup = false;
             _setupChecked = DateTime.UtcNow;
             if (check.IsCompletedSuccessfully) _setup = check.Result;
+            if (_reportFirewall is { } asked)
+            {
+                // The firewall helper just finished: say plainly whether its rule is there now.
+                _reportFirewall = null;
+                _runtime.AddNotice(check.IsCompletedSuccessfully && check.Result.Firewall == FirewallVerdict.Allowed
+                    ? $"Windows Firewall now lets devices on your home network reach port {asked}."
+                    : $"The firewall rule for port {asked} was not added. The window that opened said why.");
+            }
             Refresh();
         }));
+    }
+
+    /// <summary>The port the firewall helper was started for, until its result has been reported.</summary>
+    private int? _reportFirewall;
+
+    /// <summary>Waits for the firewall helper's window to close, then checks the firewall again,
+    /// so the checklist and the activity list show at once whether the rule is really there.</summary>
+    private async Task CheckWhenFinishedAsync(Process helper, int port)
+    {
+        using (helper)
+        {
+            try { await helper.WaitForExitAsync(); }
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { return; }
+        }
+        OnWindowThread(() =>
+        {
+            _reportFirewall = port;
+            _checkingSetup = false; // a check that started before the rule existed must not hide this one
+            CheckSetup(onlyIfStale: false);
+        });
     }
 
     private int CurrentPort => _runtime.Status.Running?.Port ?? _options.Port;
@@ -217,11 +245,12 @@ internal sealed class WindowApp : IWindowActions
         {
             // "runas" makes Windows show its administrator prompt (UAC). The rule is only
             // added if the person at the PC approves that prompt; this program cannot.
-            Process.Start(new ProcessStartInfo(script, port.ToString())
+            var helper = Process.Start(new ProcessStartInfo(script, port.ToString())
             {
                 UseShellExecute = true, Verb = "runas", WorkingDirectory = AppContext.BaseDirectory,
-            })?.Dispose();
-            _runtime.AddNotice($"Asked Windows to add the firewall rule for port {port}. Click “Check again” when it is done.");
+            });
+            _runtime.AddNotice($"Asked Windows to add the firewall rule for port {port}. A window shows the result; press a key there to close it.");
+            if (helper is not null) _ = CheckWhenFinishedAsync(helper, port);
         }
         catch (Win32Exception)
         {
