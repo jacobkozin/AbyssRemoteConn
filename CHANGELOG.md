@@ -64,8 +64,6 @@ Not yet tested
 - Controllers, the on-screen gamepad in a game and rumble: ViGEmBus is not installed there.
 - Lock, sleep, starting a Steam game and Big Picture for real.
 - Mouse and keyboard on the real desktop through the reworked client (verified live for 1.0).
-- The GitHub Actions workflow since the rename (the standalone build passed its self-test once
-  on the development PC).
 
 ## 1.0.0
 

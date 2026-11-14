@@ -40,7 +40,9 @@ browser check files pass, and the published `AbyssRemote.exe` (the default build
 HTTPS self-test. The real host was also used from the browser on the same PC with **Watch
 only** on: pairing through a `#pair=` link (the address the QR code holds), the home screen
 with the three real monitors and the installed Steam games, Game mode, Desktop mode, a file
-sent to the PC and fetched back unchanged, and sign-out.
+sent to the PC and fetched back unchanged, and sign-out. The GitHub Actions build of this
+version passes too: the tests, the standalone build (`-SelfContained`) and its self-test on a
+clean Windows machine.
 
 **Not tested yet:**
 
@@ -56,9 +58,6 @@ sent to the PC and fetched back unchanged, and sign-out.
   tests use stand-ins.
 - **Mouse and keyboard on the real desktop with the 1.1 client.** That was verified live for
   1.0; after the client rework it was only checked against a stand-in host.
-- **The CI workflow.** The GitHub Actions build has not run since the program was renamed from
-  `AbyssRemote.Host.exe`. The standalone build (`-SelfContained`) was made once on the
-  development PC and passed the self-test, and so did the default build.
 
 The [roadmap](docs/ROADMAP.md) says how each feature was verified.
 

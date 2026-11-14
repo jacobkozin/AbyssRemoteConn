@@ -120,7 +120,7 @@ item also stays open when its real effect on the PC has never been run.
 ### Build, tests and docs
 
 - [x] The program is `AbyssRemote.exe`. The default build makes a small program that runs on the installed .NET 10 runtime and downloads nothing. *Built on the development PC with no package source available; the published program passed its HTTPS self-test.*
-- [ ] The GitHub Actions workflow with the standalone build. *The standalone build (`-SelfContained`) was made once on the development PC and passed the self-test; the workflow has not run since the program was renamed.*
+- [x] The GitHub Actions workflow with the standalone build. *Passed on GitHub for the 1.1.0 commit: the tests, the standalone build (`-SelfContained`) and its HTTPS self-test on a clean Windows runner.*
 - [x] 414 unit and integration tests pass (2 skipped), plus eight Node check files. Every new route that changes something is tested without the cookie, the Origin and the CSRF token.
 - [x] A demo server for trying the browser client against pretend monitors, games and files. *Used for the Chromium checks of the client at four window sizes.*
 - [x] README, ARCHITECTURE, SECURITY and API describe 1.1, including what has not been tested.
@@ -134,7 +134,7 @@ item also stays open when its real effect on the PC has never been run.
   device.
 - Run lock, sleep, a Steam game start and Big Picture for real, and mouse and keyboard through
   the new client.
-- Run the GitHub Actions workflow; code signing.
+- Code signing.
 - Name constraints on newly created root certificates.
 - HEVC or AV1 where the device decodes them.
 

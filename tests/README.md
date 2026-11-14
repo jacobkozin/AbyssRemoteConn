@@ -98,8 +98,8 @@ all four WebSockets refuse anonymous access, that pairing needs an Origin, and t
 the source changed. That rebuild is the default one: a small
 `dist\win-x64\AbyssRemote.exe` that runs on the installed .NET 10 runtime and downloads
 nothing. It passed on the development PC. The standalone build (`-SelfContained`, which the
-GitHub Actions build uses) was made once there and passed the same self-test; the workflow
-itself has not run since the program was renamed.
+GitHub Actions build uses) was made once there and passed the same self-test, and the
+GitHub Actions workflow passes with it.
 
 ## Game mode on real hardware: `AbyssRemote.exe --probe-video`
 
