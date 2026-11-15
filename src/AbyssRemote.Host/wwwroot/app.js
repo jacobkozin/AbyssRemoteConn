@@ -3,6 +3,7 @@
 // Video comes from one of two stream modules with the same callbacks: jpeg-stream.js (Desktop
 // mode) or video-stream.js (Game mode, hardware H.264 + WebCodecs). Input goes over one
 // authenticated WebSocket as small JSON messages (see docs/API.md). No third-party code.
+import { PointerMotion, movementQueue } from './pointer-motion.js';
 import { startJpegStream } from './jpeg-stream.js';
 import { startVideoStream, gameModeSupported } from './video-stream.js';
 import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
@@ -36,6 +37,7 @@ const state = {
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
   zoom: 100, frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
   desktopWidth: 0, desktopHeight: 0,
+  separateCursor: false, cursorPoll: 0, cursorWaiting: false, cursorAskedAt: 0,
   cursor: { x: 0, y: 0, visible: false, hotX: 0, hotY: 0, width: 0, height: 0 },
   immersive: false, keyboardOpen: false, menuOpen: false, fitUserSet: false,
   pressedKeys: new Set(), lastX: 0, lastY: 0, lockedDx: 0, lockedDy: 0,
@@ -225,6 +227,8 @@ const wsUrl = (path) => `wss://${location.host}${path}`;
 
 function closeConnections() {
   state.epoch++;
+  clearInterval(state.cursorPoll); state.cursorPoll = 0; state.cursorWaiting = false;
+  state.separateCursor = false; pointerMotion.reset(); hideCursor();
   clearTimeout(state.retryTimer);
   state.retryTimer = 0;
   stopAudio();
@@ -386,6 +390,8 @@ function openControl(epoch) {
     if (epoch !== state.epoch) return;
     setNetwork('Connected', true);
     gamepads.resync();
+    pollCursor();
+    state.cursorPoll = setInterval(pollCursor, 16);
   };
   control.onmessage = (event) => { if (epoch === state.epoch) controlMessage(event.data); };
   control.onclose = (event) => { if (epoch === state.epoch) connectionLost('control', event.code); };
@@ -419,8 +425,8 @@ function openVideo(epoch) {
         state.desktopHeight = config.desktopHeight;
         if ($('remoteError').textContent === state.fallbackNotice) showError(''); // Game mode works again
       },
-      onCursor: (cursor) => { if (epoch === state.epoch) moveCursor(cursor); },
-      onCursorImage: (image) => { if (epoch === state.epoch) setCursorImage(image); },
+      onCursor: (cursor) => { if (epoch === state.epoch && !state.separateCursor) moveCursor(cursor); },
+      onCursorImage: (image) => { if (epoch === state.epoch && !state.separateCursor) setCursorImage(image); },
       onStats: (stats) => { if (epoch === state.epoch) gameStats(stats); },
     });
     return;
@@ -429,7 +435,7 @@ function openVideo(epoch) {
   state.lastRequestedWidth = width;
   state.stream = startJpegStream({
     ...common,
-    url: wsUrl(`/api/v1/stream?display=${state.display}&fps=${Number($('fpsPick').value)}&quality=85&width=${width}`),
+    url: wsUrl(`/api/v1/stream?display=${state.display}&fps=${Number($('fpsPick').value)}&quality=85&width=${width}${state.separateCursor ? '&cursor=separate' : ''}`),
   });
 }
 
@@ -500,6 +506,17 @@ async function reconnectNow() {
 function controlMessage(text) {
   let message;
   try { message = JSON.parse(text); } catch { return; }
+  if (message.type === 'cursorState') {
+    state.cursorWaiting = false;
+    if (!message.supported) { clearInterval(state.cursorPoll); state.cursorPoll = 0; return; }
+    const first = !state.separateCursor;
+    state.separateCursor = true;
+    if (message.image) setCursorImage(message.image);
+    if (pointerMotion.receive(message)) placeCursor();
+    // Negotiate before opting out of the baked-in Desktop-mode cursor. Older hosts
+    // keep working; their original video pointer remains visible.
+    if (first && state.mode !== 'game') restartVideo();
+  }
   if (message.type === 'notice') showError(message.message || '');
   if (message.type === 'rumble') rumble.receive(message);
 }
@@ -551,7 +568,35 @@ function gameStats(stats) {
   $('quickStatus').textContent = text;
 }
 
-// ---------------------------------------------------------------- Game-mode mouse pointer
+// ---------------------------------------------------------------- independent mouse pointer
+const pointerMotion = new PointerMotion();
+const pointerMoves = movementQueue((kind, data) => {
+  if (send(kind, data)) { if (kind === 'pointer') pointerMotion.sent(); }
+  else { pointerMotion.cancel(); hideCursor(); }
+});
+function pollCursor() {
+  if (!state.active || state.stopped || document.hidden || state.control?.readyState !== WebSocket.OPEN) return;
+  // At most one poll in flight. Retry after a second for an older host or a lost reply.
+  if (state.cursorWaiting && performance.now() - state.cursorAskedAt < 1000) return;
+  if (state.control.bufferedAmount > 4096) return;
+  state.cursorWaiting = true; state.cursorAskedAt = performance.now();
+  state.control.send(JSON.stringify({ kind: 'cursor' })); // read-only, including Watch only
+}
+function canMovePointer() {
+  return !state.watchOnly && state.active && !state.stopped && state.control?.readyState === WebSocket.OPEN && state.control.bufferedAmount < 4096;
+}
+function currentMonitor() { return state.displays.find(d => d.id === state.display); }
+function queuePointer(data) {
+  pointerMoves.push('pointer', data);
+  placeCursor(); // touch feedback now, without a round trip or a video decode
+}
+function relativePointer(dx, dy) {
+  if (!canMovePointer()) return;
+  const monitor = currentMonitor();
+  if (state.separateCursor && monitor) queuePointer(pointerMotion.relative(dx, dy, monitor));
+  else pointerMoves.push('move', { dx, dy });
+}
+
 
 function setCursorImage(image) {
   state.cursor.hotX = image.hotX;
@@ -572,13 +617,20 @@ function hideCursor() { $('remoteCursor').classList.add('hidden'); }
 // image is drawn at least half size so it stays visible when a 4K desktop fits on a phone.
 function placeCursor() {
   const image = $('remoteCursor'), c = state.cursor;
-  if (state.mode !== 'game' || !c.visible || !c.width || !state.desktopWidth || !image.getAttribute('src')) { hideCursor(); return; }
-  const scaleX = desktop.clientWidth / state.desktopWidth, scaleY = desktop.clientHeight / state.desktopHeight;
+  const monitor = currentMonitor();
+  let x = c.x + c.hotX, y = c.y + c.hotY, visible = c.visible;
+  let width = state.desktopWidth, height = state.desktopHeight;
+  if (state.separateCursor && monitor) {
+    x = pointerMotion.x - monitor.x; y = pointerMotion.y - monitor.y;
+    width = monitor.width; height = monitor.height;
+    visible = pointerMotion.visible && x >= 0 && y >= 0 && x < width && y < height;
+  }
+  if ((!state.separateCursor && state.mode !== 'game') || !visible || !c.width || !width || !image.getAttribute('src') || mouseLocked()) { hideCursor(); return; }
+  const scaleX = desktop.clientWidth / width, scaleY = desktop.clientHeight / height;
   const size = Math.max(scaleX, 0.5);
   image.style.width = `${c.width * size}px`;
   image.style.height = `${c.height * size}px`;
-  image.style.left = `${desktop.offsetLeft + (c.x + c.hotX) * scaleX - c.hotX * size}px`;
-  image.style.top = `${desktop.offsetTop + (c.y + c.hotY) * scaleY - c.hotY * size}px`;
+  image.style.transform = `translate3d(${desktop.offsetLeft + x * scaleX - c.hotX * size}px, ${desktop.offsetTop + y * scaleY - c.hotY * size}px, 0)`;
   image.classList.remove('hidden');
 }
 
@@ -662,11 +714,12 @@ function key(code, action) {
 }
 function tapKey(code) { key(code, 'down'); key(code, 'up'); }
 function combo(code) { key('ControlLeft', 'down'); tapKey(code); key('ControlLeft', 'up'); }
-function mouseClick(button = 0) { send('mouse', { button, action: 'down' }); send('mouse', { button, action: 'up' }); }
+function mouseClick(button = 0) { pointerMoves.flush(); send('mouse', { button, action: 'down' }); send('mouse', { button, action: 'up' }); }
 
 // Called when this page loses focus or hides: the host releases every key and button this
 // connection is holding, so nothing stays stuck down on the PC.
 function releaseAllInput(notifyHost = true) {
+  pointerMoves.cancel(); pointerMotion.cancel(); hideCursor();
   state.pressedKeys.clear();
   touchPad.reset();
   rumble.reset();
@@ -685,10 +738,13 @@ function sendTextChunks(text) {
 }
 
 function absolutePointer(event) {
+  if (!canMovePointer()) return;
   const rect = desktop.getBoundingClientRect();
   const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
   const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-  send('pointer', { x, y, display: state.display });
+  const monitor = currentMonitor();
+  if (state.separateCursor && monitor) queuePointer(pointerMotion.absolute(x * monitor.width, y * monitor.height, monitor));
+  else pointerMoves.push('pointer', { x, y, display: state.display });
 }
 
 // Touch gestures: one-finger tap = left click; two-finger tap or a still long press = right
@@ -705,6 +761,7 @@ function clearTouchTimers() {
 }
 function releaseDrag() {
   clearTouchTimers(); dragReady = false;
+  pointerMoves.flush();
   if (dragButton !== null) send('mouse', { button: dragButton, action: 'up' });
   dragButton = null;
 }
@@ -750,6 +807,7 @@ desktop.addEventListener('pointerdown', (event) => {
   if (mouseLocked()) {
     dragging = true;
     dragButton = event.button >= 0 && event.button <= 4 ? event.button : 0;
+    pointerMoves.flush();
     send('mouse', { button: dragButton, action: 'down' });
     return;
   }
@@ -785,6 +843,7 @@ desktop.addEventListener('pointerdown', (event) => {
     }, 660);
   } else {
     dragButton = event.button >= 0 && event.button <= 4 ? event.button : 0; // 3/4 = back/forward
+    pointerMoves.flush();
     send('mouse', { button: dragButton, action: 'down' });
   }
 });
@@ -828,17 +887,15 @@ desktop.addEventListener('pointermove', (event) => {
     if (event.pointerType === 'touch' && travel > 12) {
       const startDrag = dragReady && dragButton === null;
       clearTouchTimers();
-      if (startDrag) { dragButton = 0; send('mouse', { button: 0, action: 'down' }); }
+      if (startDrag) { pointerMoves.flush(); dragButton = 0; send('mouse', { button: 0, action: 'down' }); }
       dragReady = false;
     }
   }
-  const now = performance.now();
-  if (now - sentAt < 16 || state.control?.bufferedAmount > 4096) return;
-  sentAt = now;
   if ($('modePick').value === 'direct') absolutePointer(event);
-  else if (dragging) send('move', { dx: Math.round(dx * 1.5), dy: Math.round(dy * 1.5) });
+  else if (dragging) relativePointer(dx * 1.5, dy * 1.5);
 });
 function pointerEnd(event) {
+  pointerMoves.flush();
   if (event.pointerType === 'touch') touches.delete(event.pointerId);
   if (gesturePanning) {
     if (touches.size === 0) {
@@ -860,6 +917,7 @@ function pointerEnd(event) {
 }
 desktop.addEventListener('pointerup', pointerEnd);
 desktop.addEventListener('pointercancel', (event) => {
+  pointerMoves.cancel(); pointerMotion.cancel(); hideCursor();
   // Cancellation (e.g. an iOS system gesture) must never produce a click.
   if (event.pointerType === 'touch') touches.delete(event.pointerId);
   twoFingerMoved = true;
@@ -924,6 +982,7 @@ window.addEventListener('pageshow', (event) => { if (event.persisted && state.ac
 // ---------------------------------------------------------------- controls
 
 function selectDisplay(display) {
+  releaseAllInput();
   state.display = display.id;
   state.displayName = display.name;
   showSessionName();

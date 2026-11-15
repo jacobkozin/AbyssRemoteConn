@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Phone cursor feedback is drawn immediately, independently of desktop video. Host cursor
+  snapshots reconcile the position without replaying stale movement.
+- Trackpad gestures retain movement between display frames, including fractional pixels.
+  They stay within the selected monitor and do not apply Windows mouse acceleration.
+- Cursor snapshots use the existing authenticated control socket. Legacy clients retain
+  the cursor embedded in Desktop-mode video. Actual screen updates still depend on
+  capture rate, network latency and decoding; this change does not eliminate those delays.
+
 ## 1.1.0 — 2026-11-14
 
 Windows app

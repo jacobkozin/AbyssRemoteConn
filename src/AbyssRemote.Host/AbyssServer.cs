@@ -233,6 +233,7 @@ public static class AbyssServer
                 return;
             }
             using var source = c.Desktop.CreateFrameSource(display, width, quality);
+            source.IncludeCursor = ctx.Request.Query["cursor"] != "separate";
             await JpegStream.RunAsync(live, source, fps, () => c.State.IsActive(device.Id), ctx.RequestAborted);
         }));
 
@@ -300,6 +301,9 @@ public static class AbyssServer
         app.Map("/api/v1/control", (HttpContext ctx) => RunSocketAsync(ctx, c, SocketKind.Control, async (live, device) =>
         {
             using var input = c.Desktop.CreateInputSink(message => _ = live.SendJsonAsync(message, CancellationToken.None));
+            using var cursor = c.Desktop.CreateCursorSource();
+            int pointerSequence = 0;
+            long cursorReadAt = 0;
             var buffer = new byte[8192];
             while (live.Socket.State == WebSocketState.Open)
             {
@@ -318,8 +322,26 @@ public static class AbyssServer
                     var root = json.RootElement;
                     if (InputCommand.Kind(root) == "ping")
                         await live.SendJsonAsync(new { type = "pong", t = InputCommand.Double(root, "t", 0, double.MaxValue) }, ctx.RequestAborted);
+                    else if (InputCommand.Kind(root) == "cursor")
+                    {
+                        // A read-only request on the existing authenticated control socket.
+                        // Rate-limit image work even for a paired client that floods requests.
+                        if (cursorReadAt != 0 && System.Diagnostics.Stopwatch.GetElapsedTime(cursorReadAt).TotalMilliseconds < 12) continue;
+                        cursorReadAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                        var snapshot = cursor?.Read();
+                        var image = snapshot?.Image;
+                        await live.SendJsonAsync(new { type = "cursorState", supported = snapshot is not null,
+                            sequence = pointerSequence, x = snapshot?.X ?? 0, y = snapshot?.Y ?? 0,
+                            visible = snapshot?.Visible ?? false,
+                            image = image is null ? null : new { png = Convert.ToBase64String(image.Png),
+                                hotX = image.HotX, hotY = image.HotY, width = image.Width, height = image.Height } }, ctx.RequestAborted);
+                    }
                     else
+                    {
                         input.Handle(root);
+                        if (InputCommand.Kind(root) == "pointer")
+                            pointerSequence = Math.Max(pointerSequence, InputCommand.Int(root, "sequence", 0, int.MaxValue));
+                    }
                 }
             }
         }));

@@ -32,6 +32,8 @@ public sealed class DesktopEngine : IDesktop
     public IFrameSource CreateFrameSource(int display, int maxWidth, int quality) =>
         new GdiFrameSource(this, display, maxWidth, quality);
 
+    public ICursorSource CreateCursorSource() => new WindowsCursorSource();
+
     public IInputSink CreateInputSink(Action<object> notify) => new NativeInputSink(this, notify);
 
     public IVideoSource CreateVideoSource(VideoSettings settings)
@@ -68,6 +70,7 @@ public sealed unsafe class GdiFrameSource : IFrameSource
     private Graphics? _resizeGraphics;
     private byte[] _previous = [];
     private int _width, _height;
+    public bool IncludeCursor { get; set; } = true;
 
     internal GdiFrameSource(DesktopEngine desktop, int display, int maxWidth, int quality)
     {
@@ -94,7 +97,7 @@ public sealed unsafe class GdiFrameSource : IFrameSource
                 throw new DesktopUnavailableException("The PC is locked or showing a secure prompt (UAC). Waiting for the desktop…");
         }
         finally { Gdi.ReleaseDC(IntPtr.Zero, screen); }
-        CursorPainter.Draw(_memoryDc, d.X, d.Y, _width, _height);
+        if (IncludeCursor) CursorPainter.Draw(_memoryDc, d.X, d.Y, _width, _height);
         Gdi.GdiFlush();
 
         var pixels = new ReadOnlySpan<byte>((void*)_bits, _width * _height * 4);

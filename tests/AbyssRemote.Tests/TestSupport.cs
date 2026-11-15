@@ -43,6 +43,9 @@ public sealed class FakeDesktop : IDesktop
     public (int Display, int MaxWidth, int Quality)? LastFrameRequest { get; private set; }
 
     public IReadOnlyList<DisplayInfo> Displays() => Monitors.ToArray();
+    public Func<ICursorSource?> OnCreateCursor { get; set; } = () => null;
+    public ICursorSource? CreateCursorSource() => OnCreateCursor();
+    public bool LastIncludeCursor { get; set; } = true;
 
     public IFrameSource CreateFrameSource(int display, int maxWidth, int quality)
     {
@@ -82,6 +85,7 @@ public sealed class FakeDesktop : IDesktop
 
     private sealed class Source(FakeDesktop owner, int display, int maxWidth) : IFrameSource
     {
+        public bool IncludeCursor { set => owner.LastIncludeCursor = value; }
         public byte[]? Capture(bool forceFullFrame) => owner.OnCaptureMonitor is { } perMonitor
             ? perMonitor(display, maxWidth, forceFullFrame)
             : owner.OnCapture(forceFullFrame);

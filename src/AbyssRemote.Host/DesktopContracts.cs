@@ -17,6 +17,9 @@ public interface IDesktop
 {
     IReadOnlyList<DisplayInfo> Displays();
 
+    // Optional lightweight cursor feedback, independent of video encoding.
+    ICursorSource? CreateCursorSource() => null;
+
     /// <summary>Desktop mode: JPEG frames of one monitor for one viewer.</summary>
     IFrameSource CreateFrameSource(int display, int maxWidth, int quality);
 
@@ -77,6 +80,8 @@ public interface IVideoSource : IDisposable
 
 public interface IFrameSource : IDisposable
 {
+    bool IncludeCursor { set { } } // Legacy viewers and screenshots keep the baked-in cursor.
+
     /// <summary>Captures the monitor. Returns null when nothing changed since the last frame
     /// (unless <paramref name="forceFullFrame"/>). Throws <see cref="DesktopUnavailableException"/>
     /// when Windows does not allow capture right now, for example on the lock screen.</summary>

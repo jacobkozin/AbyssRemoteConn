@@ -311,3 +311,19 @@ Host to browser, besides `pong` and `notice`:
   0–1; both 0 means stop. The host sends at most one about every 16 ms per controller. The
   browser client plays it on the physical controller with the same index, where the browser
   has a vibration actuator for it.
+
+## Independent cursor feedback
+
+An authenticated control client may send `{"kind":"cursor"}`. The reply is
+`{"type":"cursorState","supported":true,"sequence":7,"x":960,"y":540,"visible":true,"image":null}`.
+Coordinates are global Windows physical pixels. `image`, when the native cursor changes,
+contains base64 `png`, `hotX`, `hotY`, `width`, and `height`. No screen capture is needed.
+Polls less than 12 ms apart are ignored; the browser keeps one outstanding poll.
+`pointer` optionally carries a nonnegative `sequence`; snapshots echo the greatest
+processed pointer sequence on this socket, so local prediction can reject old feedback.
+This acknowledges processing, not successful input into a protected Windows desktop.
+A supported client may request `/api/v1/stream?...&cursor=separate` to omit the baked
+cursor from JPEG frames. Without this parameter existing capture behavior is unchanged.
+Watch-only clients may read cursor state but send no input. Auth and origin checks remain
+the same as other control traffic. Animated cursor frames and XOR inversion are not
+reproduced exactly; XOR cursor pixels use a white shape with a dark outline.

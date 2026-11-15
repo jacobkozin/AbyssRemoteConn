@@ -133,7 +133,7 @@ h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: cl
 .screen-surface canvas { position: absolute; display: block; max-width: none; outline: none; touch-action: none; cursor: crosshair; background: #05080f; user-select: none; -webkit-user-select: none; }
 .screen-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; color: var(--muted); background: #0a0e17e0; pointer-events: none; }
 /* Game mode draws the PC's mouse pointer here instead of inside the video. */
-.remote-cursor { position: absolute; z-index: 2; max-width: none; pointer-events: none; user-select: none; -webkit-user-select: none; }
+.remote-cursor { position: absolute; left: 0; top: 0; will-change: transform; z-index: 2; max-width: none; pointer-events: none; user-select: none; -webkit-user-select: none; }
 body.pointer-locked .desktop-stage { border-color: var(--accent); }
 /* Shown on the picture for as long as Watch only is on. */
 .watch-badge { position: absolute; z-index: 3; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 9px; border: 1px solid var(--accent); border-radius: 99px; background: #0a0e17e6; color: var(--accent); font-size: 13px; font-weight: 700; pointer-events: none; }
