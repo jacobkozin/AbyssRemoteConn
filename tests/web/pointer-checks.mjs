@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { loadModules, check, finish } from './check.mjs';
-const [{ PointerMotion, movementQueue }] = await loadModules('pointer-motion.js');
+const [{ PointerMotion, movementQueue, cursorPictureReady }] = await loadModules('pointer-motion.js');
 const monitor = { id: 2, x: -1920, y: 375, width: 1920, height: 1080 };
 check('local movement appears before the host replies; old replies cannot pull it back', () => {
   const p = new PointerMotion();
@@ -59,5 +59,13 @@ check('gesture cancellation discards unsent input and fractional remainder', () 
   q.push('move',{dx:5,dy:8}); q.cancel(); tick();
   assert.equal(sent.length,0);
   q.push('move',{dx:0.3,dy:0}); tick(); assert.equal(sent.length,0);
+});
+check('the video keeps its pointer until a cursor picture can really be drawn', () => {
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  assert.equal(cursorPictureReady({ width: 32, height: 32 }, png), true);
+  assert.equal(cursorPictureReady({ width: 0, height: 0 }, png), false);       // nothing received yet
+  assert.equal(cursorPictureReady({ width: 32, height: 32 }, null), false);    // no picture in the page
+  assert.equal(cursorPictureReady({ width: 32, height: 32 }, ''), false);
+  assert.equal(cursorPictureReady({ width: 32, height: 32 }, 'data:image/png;base64,'), false);
 });
 finish('cursor motion');

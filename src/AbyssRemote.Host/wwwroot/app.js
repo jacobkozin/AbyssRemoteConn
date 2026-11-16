@@ -3,7 +3,7 @@
 // Video comes from one of two stream modules with the same callbacks: jpeg-stream.js (Desktop
 // mode) or video-stream.js (Game mode, hardware H.264 + WebCodecs). Input goes over one
 // authenticated WebSocket as small JSON messages (see docs/API.md). No third-party code.
-import { PointerMotion, movementQueue } from './pointer-motion.js';
+import { PointerMotion, movementQueue, cursorPictureReady } from './pointer-motion.js';
 import { startJpegStream } from './jpeg-stream.js';
 import { startVideoStream, gameModeSupported } from './video-stream.js';
 import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
@@ -509,9 +509,11 @@ function controlMessage(text) {
   if (message.type === 'cursorState') {
     state.cursorWaiting = false;
     if (!message.supported) { clearInterval(state.cursorPoll); state.cursorPoll = 0; return; }
+    if (message.image) setCursorImage(message.image);
+    // No picture to draw yet: leave the pointer in the video exactly as before.
+    if (!state.separateCursor && !cursorPictureReady(state.cursor, $('remoteCursor').getAttribute('src'))) return;
     const first = !state.separateCursor;
     state.separateCursor = true;
-    if (message.image) setCursorImage(message.image);
     if (pointerMotion.receive(message)) placeCursor();
     // Negotiate before opting out of the baked-in Desktop-mode cursor. Older hosts
     // keep working; their original video pointer remains visible.
@@ -576,8 +578,9 @@ const pointerMoves = movementQueue((kind, data) => {
 });
 function pollCursor() {
   if (!state.active || state.stopped || document.hidden || state.control?.readyState !== WebSocket.OPEN) return;
-  // At most one poll in flight. Retry after a second for an older host or a lost reply.
-  if (state.cursorWaiting && performance.now() - state.cursorAskedAt < 1000) return;
+  // At most one poll in flight. The host skips a request that arrives too soon after the
+  // last one (Wi-Fi often delivers two together), so ask again shortly instead of waiting a second.
+  if (state.cursorWaiting && performance.now() - state.cursorAskedAt < 150) return;
   if (state.control.bufferedAmount > 4096) return;
   state.cursorWaiting = true; state.cursorAskedAt = performance.now();
   state.control.send(JSON.stringify({ kind: 'cursor' })); // read-only, including Watch only

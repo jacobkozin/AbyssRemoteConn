@@ -60,3 +60,11 @@ export function movementQueue(send, schedule = requestAnimationFrame, cancel = c
     cancel() { if (frame !== null) cancel(frame); frame = null; pending = null; remainderX = remainderY = 0; },
   };
 }
+
+// The video keeps showing the PC's own pointer until this page has a cursor picture it can
+// really draw. A host that reports cursor support but sends no usable picture must never
+// leave the screen with no pointer at all.
+export function cursorPictureReady(cursor, source) {
+  const prefix = 'data:image/png;base64,';
+  return cursor.width > 0 && cursor.height > 0 && typeof source === 'string' && source.startsWith(prefix) && source.length > prefix.length;
+}
