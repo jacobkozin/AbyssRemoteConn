@@ -146,14 +146,15 @@ public sealed class DisplayPreviewTests
     }
 
     [TestMethod]
-    public async Task TheMonitorListCarriesNameAndRefreshRate()
+    public async Task TheMonitorListCarriesNameRefreshRateAndScale()
     {
-        _server.Desktop.Monitors[0] = _server.Desktop.Monitors[0] with { FriendlyName = "Test Monitor 27", RefreshHz = 144 };
+        _server.Desktop.Monitors[0] = _server.Desktop.Monitors[0] with { FriendlyName = "Test Monitor 27", RefreshHz = 144, Scale = 1.5 };
         using var client = await _server.PairAsync();
         var monitor = (await client.Http.GetFromJsonAsync<JsonElement>("/api/v1/displays"))[0];
 
         Assert.AreEqual("Test Monitor 27", monitor.GetProperty("friendlyName").GetString());
         Assert.AreEqual(144, monitor.GetProperty("refreshHz").GetInt32());
+        Assert.AreEqual(1.5, monitor.GetProperty("scale").GetDouble());
         // What older pages read is still there, unchanged.
         Assert.AreEqual(0, monitor.GetProperty("id").GetInt32());
         Assert.AreEqual(@"\\.\FAKE1", monitor.GetProperty("name").GetString());
@@ -188,6 +189,7 @@ public sealed class MonitorDetailsTests
             Assert.IsFalse(string.IsNullOrWhiteSpace(displays[i].FriendlyName), "a monitor without a model name is called Monitor N");
             Assert.IsTrue(displays[i].Width > 0 && displays[i].Height > 0);
             Assert.IsTrue(displays[i].RefreshHz is >= 0 and <= 1000, $"{displays[i].RefreshHz} Hz");
+            Assert.IsTrue(displays[i].Scale is >= 1 and <= 5, $"scale {displays[i].Scale}");
         }
         Assert.IsTrue(displays.Count == 0 || displays.Count(d => d.Primary) == 1);
     }

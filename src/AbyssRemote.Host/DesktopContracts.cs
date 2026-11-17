@@ -9,9 +9,11 @@ namespace AbyssRemote.Host;
 /// <summary>One monitor, in physical pixels. <paramref name="Name"/> is the Windows device name
 /// that capture uses (\\.\DISPLAY1). <paramref name="FriendlyName"/> is what a person would call
 /// it, normally the model the monitor reports ("DELL U2720Q"). <paramref name="RefreshHz"/> is 0
-/// when Windows does not say.</summary>
+/// when Windows does not say. <paramref name="Scale"/> is how much Windows enlarges text and
+/// controls on that monitor (1 for 100%, 1.5 for 150%); a phone uses it to zoom in to a size
+/// at which text can be read.</summary>
 public record DisplayInfo(int Id, string Name, int X, int Y, int Width, int Height, bool Primary,
-    string FriendlyName = "", int RefreshHz = 0);
+    string FriendlyName = "", int RefreshHz = 0, double Scale = 1);
 
 public interface IDesktop
 {

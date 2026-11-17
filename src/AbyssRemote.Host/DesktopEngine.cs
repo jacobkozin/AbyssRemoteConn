@@ -25,8 +25,15 @@ public sealed class DesktopEngine : IDesktop
             details.TryGetValue(s.DeviceName, out var monitor);
             string friendlyName = monitor is { FriendlyName.Length: > 0 } ? monitor.FriendlyName : $"Monitor {i + 1}";
             return new DisplayInfo(i, s.DeviceName, s.Bounds.Left, s.Bounds.Top, s.Bounds.Width, s.Bounds.Height, s.Primary,
-                friendlyName, monitor?.RefreshHz ?? 0);
+                friendlyName, monitor?.RefreshHz ?? 0, ScaleOf(s));
         }).ToArray();
+    }
+
+    /// <summary>The Windows scaling of a monitor, asked at its middle: 1 for 100%, 1.5 for 150%.</summary>
+    private static double ScaleOf(Screen screen)
+    {
+        var middle = new Point(screen.Bounds.Left + screen.Bounds.Width / 2, screen.Bounds.Top + screen.Bounds.Height / 2);
+        return Math.Round(App.WindowNative.ScaleAt(middle), 2);
     }
 
     public IFrameSource CreateFrameSource(int display, int maxWidth, int quality) =>

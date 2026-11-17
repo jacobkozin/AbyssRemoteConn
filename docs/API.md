@@ -38,7 +38,7 @@ answer is 403. Both have an empty body, and so do most 404 answers. Other errors
 | `GET /AbyssRemote-RootCA.cer` | nothing | The root certificate's public part, as a download |
 | `POST /api/v1/pair` | Origin | `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries |
 | `GET /api/v1/me` | cookie | `{ id, device, csrf, version, features }` |
-| `GET /api/v1/displays` | cookie | `[{ id, name, x, y, width, height, primary, friendlyName, refreshHz }]` in physical pixels |
+| `GET /api/v1/displays` | cookie | `[{ id, name, x, y, width, height, primary, friendlyName, refreshHz, scale }]` in physical pixels |
 | `GET /api/v1/displays/{id}/preview?width=` | cookie | JPEG still of one monitor, 160–960 px wide (default 480). 404, 503 |
 | `GET /api/v1/displays/{id}/screenshot` | cookie | Full-size JPEG as a download. 404, 503 |
 | `GET /api/v1/devices` | cookie | `[{ id, name, createdUtc, lastSeenUtc, expiresUtc }]` (no secrets) |
@@ -78,7 +78,7 @@ others follow from left to right (top to bottom when two share a column).
 
 ```json
 [ { "id": 0, "name": "\\\\.\\DISPLAY2", "x": 0, "y": 0, "width": 3840, "height": 2160,
-    "primary": true, "friendlyName": "DELL U2720Q", "refreshHz": 60 } ]
+    "primary": true, "friendlyName": "DELL U2720Q", "refreshHz": 60, "scale": 1.5 } ]
 ```
 
 - `id` is the number the routes below, the `display` query parameter and the `pointer`
@@ -88,6 +88,9 @@ others follow from left to right (top to bottom when two share a column).
   without one is called `Monitor 1`, `Monitor 2` and so on (`id` + 1). Two monitors of the
   same model have the same name.
 - `refreshHz` is in whole Hz, rounded (59.94 is 60). It is 0 when Windows does not say.
+- `scale` is the monitor's Windows display scaling: 1 for 100%, 1.5 for 150%. The browser
+  client uses it to pick the zoom at which text is readable on a phone. It was added after
+  1.1.0, so a client must cope with a host that does not send it.
 
 `GET /api/v1/displays/{id}/preview?width=480` answers with an `image/jpeg` still (quality 75).
 `width` is kept within 160–960; a missing or unreadable value means 480. The picture is never
