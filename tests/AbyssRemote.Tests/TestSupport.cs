@@ -34,6 +34,9 @@ public sealed class FakeDesktop : IDesktop
     public Func<int, int, bool, byte[]?>? OnCaptureMonitor { get; set; }
 
     public IReadOnlyList<string> Commands { get { lock (_commands) return _commands.ToList(); } }
+
+    /// <summary>Told about every input message as it arrives, after it was recorded.</summary>
+    public Action<JsonElement>? OnInput { get; set; }
     public int SinksOpen => Volatile.Read(ref _sinksOpen);
 
     /// <summary>The monitors of this pretend PC. Tests may add or replace them.</summary>
@@ -94,7 +97,11 @@ public sealed class FakeDesktop : IDesktop
 
     private sealed class Sink(FakeDesktop owner) : IInputSink
     {
-        public void Handle(JsonElement command) { lock (owner._commands) owner._commands.Add(command.GetRawText()); }
+        public void Handle(JsonElement command)
+        {
+            lock (owner._commands) owner._commands.Add(command.GetRawText());
+            owner.OnInput?.Invoke(command);
+        }
         public void Dispose() => Interlocked.Decrement(ref owner._sinksOpen);
     }
 }

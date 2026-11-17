@@ -55,6 +55,7 @@ public sealed class DemoServer
 
         await using var server = await TestServer.StartAsync();
         AddMonitors(server.Desktop, locked: () => Asked("locked"));
+        AddPointer(server.Desktop);
         AddGames(server.Steam);
         AddFiles(server.Transfer.Directory);
         server.Transfer.MaxUploadBytes = 5 * 1024 * 1024; // small, so "too large" can be tried with a small file
@@ -84,12 +85,78 @@ public sealed class DemoServer
     private static void AddMonitors(FakeDesktop desktop, Func<bool> locked)
     {
         desktop.Monitors.Clear();
-        desktop.Monitors.Add(new DisplayInfo(0, @"\\.\DISPLAY1", 3840, 360, 2560, 1440, false, "Northlight 27 QHD", 144));
-        desktop.Monitors.Add(new DisplayInfo(1, @"\\.\DISPLAY2", 0, 0, 3840, 2160, true, "Aurora 32 4K", 240));
+        desktop.Monitors.Add(new DisplayInfo(0, @"\\.\DISPLAY1", 3840, 360, 2560, 1440, false, "Northlight 27 QHD", 144, Scale: 1.25));
+        desktop.Monitors.Add(new DisplayInfo(1, @"\\.\DISPLAY2", 0, 0, 3840, 2160, true, "Aurora 32 4K", 240, Scale: 1.5));
         desktop.Monitors.Add(new DisplayInfo(2, @"\\.\DISPLAY3", -1080, 0, 1080, 1920, false, "Monitor 3", 60));
-        desktop.OnCaptureMonitor = (monitor, maxWidth, _) => locked()
-            ? throw new DesktopUnavailableException("The PC is locked or showing a secure prompt (UAC). Waiting for the desktop…")
-            : MonitorPicture(desktop.Monitors[monitor], maxWidth);
+        // Like the real screen, the pretend one only has a new picture when something changed
+        // (its clock, once a second); in between a stream is told "unchanged".
+        var shown = new ConcurrentDictionary<(int Monitor, int Width), byte[]>();
+        desktop.OnCaptureMonitor = (monitor, maxWidth, forceFullFrame) =>
+        {
+            if (locked()) throw new DesktopUnavailableException("The PC is locked or showing a secure prompt (UAC). Waiting for the desktop…");
+            byte[] picture = MonitorPicture(desktop.Monitors[monitor], maxWidth);
+            var key = (monitor, Math.Min(maxWidth, desktop.Monitors[monitor].Width));
+            if (!forceFullFrame && shown.TryGetValue(key, out var last) && ReferenceEquals(last, picture)) return null;
+            shown[key] = picture;
+            return picture;
+        };
+    }
+
+    /// <summary>Gives the pretend PC a mouse pointer that goes where the browser's "pointer"
+    /// messages send it. With it the page draws its own pointer, and zooming in on the pointer
+    /// and a zoomed-in view that follows it can be tried.</summary>
+    private static void AddPointer(FakeDesktop desktop)
+    {
+        byte[] picture = PointerPicture();
+        desktop.OnInput = command =>
+        {
+            if (!command.TryGetProperty("kind", out var kind) || kind.GetString() != "pointer") return;
+            if (desktop.Monitors.ElementAtOrDefault(command.GetProperty("display").GetInt32()) is not { } monitor) return;
+            DemoPointer.MoveTo(monitor.X + (int)(command.GetProperty("x").GetDouble() * monitor.Width),
+                               monitor.Y + (int)(command.GetProperty("y").GetDouble() * monitor.Height));
+        };
+        desktop.OnCreateCursor = () => new DemoPointer(picture);
+    }
+
+    /// <summary>One pointer for the pretend PC. Each browser connection gets a reader of its
+    /// own, which sends the picture once and the position every time it is asked.</summary>
+    private sealed class DemoPointer(byte[] picture) : ICursorSource
+    {
+        private static int _x = 1920, _y = 1080; // starts in the middle of the main monitor
+        private bool _sent;
+
+        public static void MoveTo(int x, int y) { Volatile.Write(ref _x, x); Volatile.Write(ref _y, y); }
+
+        public CursorSnapshot Read()
+        {
+            var image = _sent ? null : new CursorImage(picture, 1, 1, PointerSize, PointerSize);
+            _sent = true;
+            return new CursorSnapshot(Volatile.Read(ref _x), Volatile.Read(ref _y), true, image);
+        }
+
+        public void Dispose() { }
+    }
+
+    private const int PointerSize = 32;
+
+    /// <summary>A white arrow with a dark outline on a clear background, as a PNG.</summary>
+    private static byte[] PointerPicture()
+    {
+        lock (Drawing)
+        {
+            using var bitmap = new Bitmap(PointerSize, PointerSize, PixelFormat.Format32bppArgb);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                PointF[] arrow = [new(1, 1), new(1, 24), new(7, 18), new(12, 29), new(16, 27), new(11, 17), new(19, 17)];
+                using var outline = new Pen(Color.FromArgb(20, 24, 32), 2f);
+                graphics.FillPolygon(Brushes.White, arrow);
+                graphics.DrawPolygon(outline, arrow);
+            }
+            using var png = new MemoryStream();
+            bitmap.Save(png, ImageFormat.Png);
+            return png.ToArray();
+        }
     }
 
     /// <summary>A dozen games with covers and two without, some never played, one with a very
