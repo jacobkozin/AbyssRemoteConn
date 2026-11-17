@@ -210,8 +210,11 @@ released, the page loses focus or Watch only is turned on.
 
 The on-screen gamepad (`touch-controls.js`) builds the same `gamepad` message from touches,
 at most one per animation frame, so the host cannot tell it from a physical controller. The
-special keys and shortcuts in the keyboard sheet are ordinary `key` messages. Everything that
-sends input goes through one function in `app.js`, and that is where Watch only blocks it.
+special keys and shortcuts in the keyboard sheet are ordinary `key` messages. Typing in the
+sheet's box is sent as it happens: the box is compared with what it held before, what went
+away becomes Backspace `key` messages and what is new a `text` message. That one rule also
+covers a correction made by the phone's keyboard. Everything that sends input goes through
+one function in `app.js`, and that is where Watch only blocks it.
 
 ## The browser client
 
@@ -223,7 +226,17 @@ The client is plain ES modules with no build step. `index.html` holds three scre
   (`library.js`), file transfer (`files.js`), lock and sleep, the clipboard, paired devices.
 - **Stream** (`app.js`): the picture (`jpeg-stream.js` or `video-stream.js`), sound
   (`audio.js`), input, controllers (`gamepad.js`, `rumble.js`, `touch-controls.js`) and the
-  stream's switches.
+  stream's switches. Two modules hold arithmetic only, so Node can check them: `view-zoom.js`
+  (how far the picture may be zoomed, where to scroll, trackpad and scroll speed) and
+  `live-typing.js` (what a change in the typing box becomes on the PC).
+
+The stream view zooms by layout, not by a transform: the canvas gets a larger CSS size on a
+surface inside a scrolling box, and `app.js` remembers which point of the picture is in the
+middle of the stage. That point is put back after every change of size (rotation, the phone's
+keyboard opening), a pinch keeps the point between the fingers where it is, and Trackpad
+scrolls just far enough to keep the pointer in view. Desktop mode asks the host for a wider
+picture as the zoom grows, up to the monitor's own width. The zoom at which text is readable
+comes from the monitor's Windows scaling, which the host reports with each monitor.
 
 `api.js` makes every HTTP call and adds the CSRF header to each one that changes something.
 `dom.js`, `dialog.js` and `format.js` are small helpers. Logic that needs no page (tidying
@@ -281,10 +294,11 @@ fresh clone.
   - runtime and window tests: start, stop and restart through `HostRuntime`, the window built
     off screen at four scales (nothing clipped, nothing overlapping), and the whole app started
     hidden and quit again.
-- `tests/web/*-checks.mjs` (eight files, run with Node): `client-checks.mjs` checks the syntax
+- `tests/web/*-checks.mjs` (eleven files, run with Node): `client-checks.mjs` checks the syntax
   of every browser module, element ids, imports, no inline scripts (CSP), no external URLs and
-  version consistency. The other seven check the logic of pairing, monitors, the games list,
-  files, touch controls, the bitrate rule and rumble.
+  version consistency. The other ten check the logic of pairing, monitors, the games list,
+  files, touch controls, the bitrate rule, rumble, pointer prediction, the stream view's zoom
+  and scrolling, and live typing.
 - The demo server (`DemoServer.cs`, started with `ABYSS_REMOTE_DEMO=1`) serves the browser
   client against the test fakes, so every button can be tried without touching the real PC.
 - `AbyssRemote.exe --smoke-test`: the published program with its real certificate on a free

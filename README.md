@@ -44,20 +44,29 @@ sent to the PC and fetched back unchanged, and sign-out. The GitHub Actions buil
 version passes too: the tests, the standalone build (`-SelfContained`) and its self-test on a
 clean Windows machine.
 
-**Not tested yet:**
+Changes made after 1.1.0 (the page's own mouse pointer, zoom, the typing bar; see
+"Unreleased" in the [changelog](CHANGELOG.md)) were checked on 2026-11-17 with 424 automated
+tests (2 skipped), the eleven browser check files, and in a phone-sized Chromium with
+emulated touches against the demo server.
 
-- **A real iPhone or iPad, Safari, or any touch screen.** Phone layout, touch gestures, the
-  on-screen gamepad and the Home Screen app were only tried in a phone-sized Chromium window.
-  No phone has scanned the QR code or installed the certificate from the download address.
-- **Home-network mode on the development PC.** Everything above ran on `127.0.0.1`; the
-  network checks are unit tests.
-- **Controllers.** They need the ViGEmBus driver, which is not installed on the development
-  PC. Physical controllers, the on-screen gamepad's effect in a game, and rumble have never
-  run against the driver.
+**Not tested yet, or not in any systematic way:**
+
+- **A real phone or tablet.** For 1.1 the phone layout, touch gestures, the on-screen gamepad
+  and the Home Screen app were only tried in a phone-sized Chromium window. Since then the
+  app has been used from a phone on the home network (pairing, the stream and touch control),
+  which is how the missing mouse pointer was found. Nothing was measured there, and the
+  pointer fix, the zoom and the typing bar that followed have only been tried in Chromium
+  with emulated touches.
+- **Home-network mode** has the same standing: in use from one phone, checked by unit tests,
+  never measured.
+- **Controllers.** The ViGEmBus driver is installed on the development PC now, but physical
+  controllers, the on-screen gamepad's effect in a game, and rumble have still never run
+  against it.
 - **Lock, sleep, starting a Steam game and Big Picture** have never been run for real. Their
   tests use stand-ins.
 - **Mouse and keyboard on the real desktop with the 1.1 client.** That was verified live for
-  1.0; after the client rework it was only checked against a stand-in host.
+  1.0; after the client rework it was checked against a stand-in host, and used from a phone
+  as described above.
 
 The [roadmap](docs/ROADMAP.md) says how each feature was verified.
 
@@ -90,13 +99,20 @@ The [roadmap](docs/ROADMAP.md) says how each feature was verified.
 - **Lock and sleep:** lock the PC or put it to sleep from the device. Nothing else: no
   shutdown, no restart, and no way to run a command.
 - **Input:** mouse (pointer or trackpad style), smooth wheel, physical keyboard mapped by scan
-  code, text entry from phone keyboards, "Lock mouse" for games, touch gestures (tap,
-  two-finger tap or long press for right-click, hold-then-drag, two-finger scroll, pinch to
-  zoom from 100% to 250%).
+  code, "Lock mouse" for games, touch gestures (tap, two-finger tap or long press for
+  right-click, hold-then-drag, two-finger scroll, pinch to zoom).
+- **Typing from a phone:** a slim bar above the phone's keyboard sends each key to the PC as
+  it is typed, with Esc, Tab, Ctrl, Alt, Shift, Win, the arrows and more in a row above it.
+  The picture stays visible above the bar and zooms in on the pointer while it is open.
+- **Zoom:** pinch anywhere on the picture, up to twice the size at which text is as large as
+  in a phone app (at least 400%). A zoom button goes straight to that readable size at the
+  pointer, and back to the whole screen. Zoomed in, Trackpad keeps the pointer in view and
+  Direct touch moves the picture with one finger.
 - **Special keys and shortcuts:** the keyboard sheet has Ctrl, Alt, Shift and Win as keys that
-  stay held until tapped again; Esc, Tab, Del, Ins, Home, End, PgUp, PgDn, the arrows, PrtSc
-  and F1–F12; and one-tap Alt+Tab, Task Manager, Show desktop, Close window, Snip and Steam
-  overlay.
+  stay held until tapped again, or until the next letter typed on the phone's keyboard, which
+  they turn into a shortcut (Ctrl, then c, is Ctrl+C); Esc, Tab, Del, Ins, Home, End, PgUp,
+  PgDn, the arrows, PrtSc and F1–F12; and one-tap Alt+Tab, Task Manager, Show desktop, Close
+  window, Snip and Steam overlay.
 - **Controllers:** a controller paired with the phone or tablet becomes a virtual Xbox 360
   controller on the PC, with rumble passed back where the browser supports it. **Touch
   gamepad** puts an on-screen controller over the picture instead. Both need ViGEmBus, see
@@ -104,8 +120,8 @@ The [roadmap](docs/ROADMAP.md) says how each feature was verified.
 - **Watch only:** see and hear the PC without sending any mouse, keyboard or controller input.
 - **Sound:** what the PC plays, streamed to the browser with a small adaptive buffer.
 - **Clipboard:** text in both directions, on demand.
-- **Phones and tablets:** full-screen layout with a floating Controls button, Fit/Fill/Stretch,
-  zoom, an on-screen keyboard sheet, and an installable Home Screen app.
+- **Phones and tablets:** full-screen layout with floating buttons for zoom, the keyboard and
+  Controls, Fit/Fill/Stretch, and an installable Home Screen app.
 - **Reliability:** reconnects by itself (also after the host restarts, for example when you
   change its port), detects dead connections, releases held keys and buttons when a
   connection drops, remembers your settings.
@@ -220,18 +236,27 @@ start audio after a tap, so after reloading the page, tap once more.
 
 ### Stream controls
 
-The controls are in the top bar on a computer and behind the floating **Controls** button on
-a phone:
+The controls are in the top bar on a computer. A phone shows three floating buttons instead:
+zoom, the keyboard, and **Controls** for everything else.
 
-- **Keyboard** opens a sheet for typing text, with the special keys and shortcuts listed under
-  [Features](#features).
+- **Keyboard** opens the typing bar. What you type goes to the PC key by key, Backspace and
+  Enter included. **More** adds F1–F12, the shortcuts listed under [Features](#features), a
+  box for longer text (write it with autocorrect or dictation, then press Send) and the
+  clipboard. On a phone the picture ends above the bar and zooms in on the pointer, which is
+  where you last tapped; the **Zoom to type** switch in Controls turns that zooming off.
+- **Zoom** (the magnifier) zooms in on the pointer to a size at which text is readable. Tap
+  it again for the whole screen.
 - **Touch gamepad** shows two sticks, a D-pad, A/B/X/Y, bumpers, triggers, View, Guide, Menu
   and both stick clicks over the picture.
 - **Watch only** stops all input from this device. A badge on the picture shows it is on, and
   it stays on until you turn it off, also after a reload.
 - **Monitors**, **Screenshot**, **Sound** and **Home**.
 
-Pinch with two fingers to zoom the picture; drag with two fingers to move around while zoomed.
+Pinch with two fingers to zoom, on the picture or on the empty space around it; the spot
+between your fingers stays between them. Two fingers moving together scroll the window under
+the PC's pointer. When the picture is larger than the screen, **Trackpad** moves the view
+along with the pointer and **Direct touch** moves the picture with one finger: tap to click,
+hold for a moment and then move to drag.
 
 ### Controllers
 
@@ -343,8 +368,8 @@ R3.3 issues fixed in 1.0, what 1.1 added and the known limits are in
 
 ```powershell
 .\scripts\Build-And-Test.ps1                       # everything BUILD-AND-TEST.bat does
-dotnet test tests\AbyssRemote.Tests                # unit and integration tests (414 pass, 2 skipped)
-node tests\web\client-checks.mjs                   # one of the eight browser client check files
+dotnet test tests\AbyssRemote.Tests                # unit and integration tests (424 pass, 2 skipped)
+node tests\web\client-checks.mjs                   # one of the eleven browser client check files
 ```
 
 The integration tests start the real HTTPS server with fake desktop, input, video and audio
@@ -360,7 +385,8 @@ src/AbyssRemote.Host/Features/  Monitor previews, file transfer, lock and sleep,
 src/AbyssRemote.Host/GameMode/  DXGI, Direct3D 11, Media Foundation, WASAPI, ViGEmBus interop
 src/AbyssRemote.Host/wwwroot/   Browser client (no frameworks, no build step): app.js for the
                                 stream, pairing.js, home.js, monitors.js, library.js, files.js,
-                                touch-controls.js, adaptive-bitrate.js, rumble.js and helpers
+                                touch-controls.js, view-zoom.js, live-typing.js,
+                                adaptive-bitrate.js, rumble.js and helpers
 tests/AbyssRemote.Tests/        MSTest unit + integration tests, demo server
 tests/web/                      Browser client checks (Node)
 tools/make_icon.ps1             Draws the app icon: the Windows .ico and the web-app PNGs

@@ -114,7 +114,8 @@ item also stays open when its real effect on the PC has never been run.
 
 - [x] Home screen after pairing: monitors, games, files, This PC, This device. *Chromium against the demo server at four window sizes, and live.*
 - [ ] Special keys and one-tap shortcuts in the keyboard sheet. *In a phone-sized Chromium against the demo server, the keys of the shortcuts arrived at the host in the right order. Not pressed against the real desktop.*
-- [ ] Pinch zoom with two fingers (100–250%). *The arithmetic is checked in Node. The gesture has not been tried on a touch screen.* _(device)_
+- [ ] Pinch zoom around the fingers, up to twice the readable size (at least 400%), a zoom button, and a zoomed-in view that follows the pointer (Trackpad) or moves with one finger (Direct touch). *Added after 1.1.0. The arithmetic is checked in Node, the gestures in a phone-sized Chromium with emulated touches against the demo server. Not tried on a real touch screen.* _(device)_
+- [ ] Typing bar: keys go to the PC as they are typed, and the picture stays visible above the phone's keyboard, zoomed in on the pointer. *Added after 1.1.0. Typing, Backspace, Enter, a simulated correction and Ctrl+C were checked in a phone-sized Chromium against the demo server. A real phone keyboard, and how iOS moves the page when it opens, have not been tried.* _(device)_
 - [ ] Mouse and keyboard through the reworked client. *Verified live for 1.0. After the rework they were only checked in Chromium against the demo server.*
 
 ### Build, tests and docs
@@ -128,7 +129,8 @@ item also stays open when its real effect on the PC has never been run.
 ## Next
 
 - Test on a real iPhone and iPad: certificate download and trust, scanning the QR code, touch
-  gestures and pinch zoom, the on-screen gamepad, Game mode decode, sound, the Home Screen app.
+  gestures and pinch zoom, the typing bar, the on-screen gamepad, Game mode decode, sound, the
+  Home Screen app.
 - Install ViGEmBus and test a real controller, the on-screen gamepad in a game, and rumble.
 - Run home-network mode on the home network: the firewall rule, the QR address, a second
   device.

@@ -16,6 +16,8 @@
   --warning: #f0b95f;
   --danger: #f87171;
   --keyboard-offset: 0px;
+  --viewport-top: 0px;
+  --typing-height: 0px;
 }
 
 /* Base */
@@ -129,7 +131,8 @@ h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: cl
 .desktop-stage { position: relative; width: 100%; height: clamp(320px, 68dvh, 1150px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: #03060c; isolation: isolate; }
 .screen-scroller { position: absolute; inset: 0; overflow: hidden; overscroll-behavior: contain; touch-action: pan-x pan-y; }
 .desktop-stage.zoomed .screen-scroller { overflow: auto; scrollbar-width: thin; }
-.screen-surface { position: relative; width: 100%; height: 100%; min-width: 100%; min-height: 100%; }
+/* touch-action none: fingers anywhere on the stage are gestures for app.js (pinch, scroll, trackpad). */
+.screen-surface { position: relative; width: 100%; height: 100%; min-width: 100%; min-height: 100%; touch-action: none; }
 .screen-surface canvas { position: absolute; display: block; max-width: none; outline: none; touch-action: none; cursor: crosshair; background: #05080f; user-select: none; -webkit-user-select: none; }
 .screen-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; color: var(--muted); background: #0a0e17e0; pointer-events: none; }
 /* Game mode draws the PC's mouse pointer here instead of inside the video. */
@@ -170,10 +173,24 @@ body:not(.game-mode) .game-only, body.game-mode .desktop-only { display: none !i
 .keyboard-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
 .keyboard-actions .primary { margin-left: auto; }
 .keyboard-clipboard button { flex: 1; }
-.keyboard-status { min-height: 18px; margin-top: 8px; font-size: 13px; color: var(--accent); }
+.keyboard-status { margin-top: 8px; font-size: 13px; color: var(--accent); }
+.keyboard-status:empty { display: none; }
+/* Typing. The sheet starts as a slim bar: a row of keys and a box whose text goes straight
+   to the PC. "More" opens the rest above it (F keys, shortcuts, a box for longer text). */
+.keyboard-sheet { padding: 8px; }
+.keyboard-more { padding: 4px 4px 0; }
+.special-keys.typing-keys { flex-wrap: nowrap; margin: 0 0 6px; overflow-x: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.typing-keys::-webkit-scrollbar { display: none; }
+.typing-keys button { flex: none; }
+.typing-line { display: flex; gap: 6px; align-items: center; }
+.typing-line .button { min-height: 44px; }
+.typing-box { position: relative; flex: 1; min-width: 0; }
+#liveKeys { display: block; width: 100%; height: 44px; min-height: 44px; max-height: 44px; padding: 10px 12px; overflow: hidden; resize: none; line-height: 22px; white-space: nowrap; }
+.typing-hint { position: absolute; top: 0; right: 12px; bottom: 0; left: 13px; overflow: hidden; color: var(--muted); line-height: 44px; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
+.typing-box.has-text .typing-hint { display: none; }
 
 /* Floating controls (only shown in immersive mode) */
-.quick-toggle, .quick-panel { display: none; }
+.quick-dock, .quick-panel { display: none; }
 .quick-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .quick-panel-head > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .quick-panel-head strong { font-size: 17px; }
@@ -212,16 +229,24 @@ body.immersive .desktop-stage {
   background: #02060d;
 }
 body.immersive .screen-scroller { -webkit-overflow-scrolling: touch; }
-body.immersive .quick-toggle {
+/* The floating buttons at the lower right: zoom, the keyboard and Controls. */
+body.immersive .quick-dock {
   position: fixed; z-index: 35;
   right: calc(24px + env(safe-area-inset-right, 0px));
   bottom: calc(23px + env(safe-area-inset-bottom, 0px));
-  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 9px 16px 9px 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.quick-toggle, .dock-button {
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 9px 16px 9px 12px;
   border: 1px solid var(--border); border-radius: 99px;
   background: #131a2aeb; color: var(--text);
   box-shadow: 0 5px 20px #0009;
   font-size: 14px; font-weight: 600;
 }
+.dock-button { width: 44px; padding: 0; }
+.dock-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+/* While typing, the bar above the phone's keyboard has what is needed. */
+body.immersive.typing .quick-dock { display: none; }
 body.immersive .quick-panel:not(.hidden) {
   position: fixed; z-index: 34;
   right: calc(24px + env(safe-area-inset-right, 0px));
@@ -241,6 +266,21 @@ body.immersive .sheet {
   left: calc(9px + env(safe-area-inset-left, 0px));
   bottom: calc(75px + var(--keyboard-offset) + env(safe-area-inset-bottom, 0px));
   width: auto; max-width: 580px; max-height: min(66dvh, 460px); margin: auto;
+}
+
+/* Phones: the typing bar spans the screen and sits on the phone's keyboard, and the picture
+   ends just above it, so what is typed can be seen. app.js keeps --keyboard-offset,
+   --viewport-top and --typing-height up to date. */
+body.immersive .sheet.keyboard-sheet {
+  right: 0; left: 0; bottom: var(--keyboard-offset);
+  width: auto; max-width: none; margin: 0;
+  max-height: calc(100dvh - var(--keyboard-offset) - var(--viewport-top) - 8px - env(safe-area-inset-top, 0px));
+  padding: 6px calc(8px + env(safe-area-inset-right, 0px)) calc(6px + max(0px, env(safe-area-inset-bottom, 0px) - var(--keyboard-offset))) calc(8px + env(safe-area-inset-left, 0px));
+  border-width: 1px 0 0; border-radius: 14px 14px 0 0;
+}
+body.immersive.typing .desktop-stage {
+  top: calc(6px + var(--viewport-top) + env(safe-area-inset-top, 0px));
+  bottom: calc(var(--keyboard-offset) + var(--typing-height) + 4px);
 }
 
 /* Small screens */
@@ -274,7 +314,7 @@ body.immersive .sheet {
     bottom: calc(11px + env(safe-area-inset-bottom, 0px));
     left: calc(11px + env(safe-area-inset-left, 0px));
   }
-  body.immersive .quick-toggle { right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(19px + env(safe-area-inset-bottom, 0px)); }
+  body.immersive .quick-dock { right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(19px + env(safe-area-inset-bottom, 0px)); }
   body.immersive .quick-panel:not(.hidden) {
     right: calc(20px + env(safe-area-inset-right, 0px));
     bottom: calc(70px + env(safe-area-inset-bottom, 0px));

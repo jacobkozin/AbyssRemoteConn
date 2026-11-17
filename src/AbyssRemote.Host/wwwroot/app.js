@@ -10,6 +10,8 @@ import { unlockAudio, audioUnlocked, startAudio } from './audio.js';
 import { watchGamepads } from './gamepad.js';
 import { controllerRumble } from './rumble.js';
 import { installTouchPad, pinchZoom, shortcutSteps } from './touch-controls.js';
+import { clampZoom, followScroll, fractionAt, guessMonitorScale, scrollFor, trackpadGain, twoFingerGesture, wheelUnits, zoomRange } from './view-zoom.js';
+import { TYPING_GUARD, keyCodeFor, typedText, typingChange } from './live-typing.js';
 import { api, fetchFile, refreshIdentity, session } from './api.js';
 import { $, el, icon, saveBlob } from './dom.js';
 import { fileNameFromDisposition } from './format.js';
@@ -30,16 +32,21 @@ const WATCHING = 'Watch only is on. Turn it off to control the PC.';
 // shown; `displayName` is the Windows device name of the monitor the user chose, which is
 // what gets remembered (numbers change when monitors are plugged in or rearranged).
 // `watchOnly` stops every kind of input from being sent.
+// `zoom` is a percentage of the size at which the picture fits the stage. `viewX`/`viewY`
+// say which point of the picture (0 to 1) is in the middle of the stage, so the place being
+// looked at survives rotation and the phone keyboard opening. `pointed` is where this device
+// last pointed in Direct touch, as the same kind of fractions.
 const state = {
   active: false, stopped: false, watchOnly: false, monitorsOpen: false, touchPad: false,
   mode: 'desktop', gameAvailable: false, fallbackNotice: '', soundOn: false, audio: null,
   displays: [], display: 0, displayName: null,
   stream: null, control: null, epoch: 0, retryCount: 0, retryTimer: 0,
-  zoom: 100, frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
+  zoom: 100, viewX: 0.5, viewY: 0.5, pointed: null, typingZoom: true,
+  frameWidth: 1280, frameHeight: 720, lastRequestedWidth: 0,
   desktopWidth: 0, desktopHeight: 0,
   separateCursor: false, cursorPoll: 0, cursorWaiting: false, cursorAskedAt: 0,
   cursor: { x: 0, y: 0, visible: false, hotX: 0, hotY: 0, width: 0, height: 0 },
-  immersive: false, keyboardOpen: false, menuOpen: false, fitUserSet: false,
+  immersive: false, keyboardOpen: false, keyboardMore: false, menuOpen: false, fitUserSet: false,
   pressedKeys: new Set(), lastX: 0, lastY: 0, lockedDx: 0, lockedDy: 0,
   stats: { frames: 0, bytes: 0, since: 0, idle: false },
 };
@@ -74,7 +81,8 @@ function loadSettings() {
 function saveSettings() {
   const data = { displayName: state.displayName, mode: $('modePick').value, fps: $('fpsPick').value,
                  fit: state.fitUserSet ? $('fitPick').value : undefined, streamMode: state.mode, sound: state.soundOn, watchOnly: state.watchOnly,
-                 gameHeight: $('gameHeightPick').value, gameFps: $('gameFpsPick').value, bitrate: $('bitratePick').value };
+                 gameHeight: $('gameHeightPick').value, gameFps: $('gameFpsPick').value, bitrate: $('bitratePick').value,
+                 typingZoom: state.typingZoom };
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); } catch { /* not remembered */ }
 }
 function applySettings(saved) {
@@ -92,6 +100,7 @@ function applySettings(saved) {
   if (saved.streamMode === 'game') state.mode = 'game'; // confirmed once we know the PC and browser support it
   state.soundOn = saved.sound === true; // still needs a tap after each page load before audio may play
   state.watchOnly = saved.watchOnly === true; // remembered, so "only watching" never silently turns into control
+  state.typingZoom = saved.typingZoom !== false;
 }
 
 // ---------------------------------------------------------------- views
@@ -140,6 +149,7 @@ function showRemote() {
   showView('remote');
   rememberStreaming(true);
   state.active = true;
+  resetView(); // a new session starts with the whole screen
   // Phones start with a compact session; settings stay one tap away.
   $('settingsPanel').classList.toggle('hidden', window.innerWidth < 700);
   $('settingsToggle').setAttribute('aria-expanded', String(window.innerWidth >= 700));
@@ -269,6 +279,8 @@ const toggles = [
     isOn: () => state.watchOnly, flip: () => setWatchOnly(!state.watchOnly) },
   { id: 'sound', icon: 'sound', label: 'Sound', hint: "Play the PC's sound on this device",
     isOn: () => state.soundOn, flip: () => toggleSound() },
+  { id: 'typingZoom', icon: 'zoom', label: 'Zoom to type', hint: 'Zoom in on the pointer while the phone keyboard is open',
+    isOn: () => state.typingZoom, flip: () => { state.typingZoom = !state.typingZoom; saveSettings(); syncToggles(); } },
 ];
 
 function buildToggles() {
@@ -398,10 +410,12 @@ function openControl(epoch) {
 }
 
 function requestedWidth() {
-  // Enough pixels for sharp text on high-DPI phones, never more than the monitor has.
+  // Enough pixels for sharp text on high-DPI phones at the current zoom, never more than the
+  // monitor has. `shown` is how wide the whole picture is drawn, in CSS pixels.
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const displayWidth = state.displays.find(d => d.id === state.display)?.width || 2560;
-  const target = Math.max(1920, Math.round($('desktopStage').clientWidth * dpr * 1.35 * (state.zoom > 150 ? 1.15 : 1)));
+  const shown = Math.max($('desktopStage').clientWidth, layout.drawW);
+  const target = Math.max(1920, Math.round(shown * dpr * 1.35));
   return Math.min(displayWidth, 3840, target);
 }
 
@@ -440,10 +454,11 @@ function openVideo(epoch) {
 }
 
 // Display, frame rate and resolution changes only restart the video; input stays connected.
-function restartVideo() {
+function restartVideo({ quiet = false } = {}) {
   if (!state.active || state.stopped || !state.control) { connect(); return; }
   state.stream?.stop();
-  showOverlay('Switching…');
+  // A change of sharpness alone keeps the last picture on screen until the new one arrives.
+  if (!quiet) showOverlay('Switching…');
   openVideo(state.epoch);
 }
 
@@ -517,7 +532,7 @@ function controlMessage(text) {
     if (pointerMotion.receive(message)) placeCursor();
     // Negotiate before opting out of the baked-in Desktop-mode cursor. Older hosts
     // keep working; their original video pointer remains visible.
-    if (first && state.mode !== 'game') restartVideo();
+    if (first && state.mode !== 'game') restartVideo({ quiet: true }); // the same picture, minus its pointer
   }
   if (message.type === 'notice') showError(message.message || '');
   if (message.type === 'rumble') rumble.receive(message);
@@ -596,7 +611,7 @@ function queuePointer(data) {
 function relativePointer(dx, dy) {
   if (!canMovePointer()) return;
   const monitor = currentMonitor();
-  if (state.separateCursor && monitor) queuePointer(pointerMotion.relative(dx, dy, monitor));
+  if (state.separateCursor && monitor) { queuePointer(pointerMotion.relative(dx, dy, monitor)); followPointer(); }
   else pointerMoves.push('move', { dx, dy });
 }
 
@@ -651,43 +666,184 @@ function updateStats(force = false) {
   state.stats = { frames: 0, bytes: 0, since: now, idle: stats.idle };
 }
 
+// ---------------------------------------------------------------- zoom and position
+
+// What the last layout worked out, in CSS pixels: the stage (viewW × viewH), the picture at
+// 100% zoom (baseW × baseH) and as drawn (drawW × drawH), and the scrolled surface that
+// holds it, with the picture's corner at left/top.
+const layout = { viewW: 0, viewH: 0, baseW: 0, baseH: 0, drawW: 0, drawH: 0, surfaceW: 0, surfaceH: 0, left: 0, top: 0 };
+
+function monitorScale() {
+  const monitor = currentMonitor();
+  return monitor?.scale || guessMonitorScale(monitor?.width || state.frameWidth);
+}
+function zoomLimits() {
+  return zoomRange(layout.baseW || 1, currentMonitor()?.width || state.frameWidth, monitorScale());
+}
+// How large one pixel of the PC's monitor is drawn here, in CSS pixels.
+function pictureScale() { return layout.drawW / Math.max(1, currentMonitor()?.width || state.frameWidth); }
+// True when the picture is larger than the stage, so there is somewhere to move it.
+function canPan() { return layout.surfaceW > layout.viewW + 1 || layout.surfaceH > layout.viewH + 1; }
+
 function updateScreenLayout() {
   const stage = $('desktopStage');
   if (stage.clientWidth === 0 || stage.clientHeight === 0) return;
-  const viewportW = stage.clientWidth, viewportH = stage.clientHeight;
+  const viewW = stage.clientWidth, viewH = stage.clientHeight;
   const iw = state.frameWidth, ih = state.frameHeight;
   const viewMode = $('fitPick').value;
-  let drawW, drawH;
-  if (viewMode === 'stretch') { drawW = viewportW; drawH = viewportH; }
+  let baseW, baseH;
+  if (viewMode === 'stretch') { baseW = viewW; baseH = viewH; }
   else {
-    const ratio = viewMode === 'fill' ? Math.max(viewportW / iw, viewportH / ih) : Math.min(viewportW / iw, viewportH / ih);
-    drawW = iw * ratio;
-    drawH = ih * ratio;
+    const ratio = viewMode === 'fill' ? Math.max(viewW / iw, viewH / ih) : Math.min(viewW / iw, viewH / ih);
+    baseW = iw * ratio;
+    baseH = ih * ratio;
   }
-  drawW = Math.max(1, Math.round(drawW * state.zoom / 100));
-  drawH = Math.max(1, Math.round(drawH * state.zoom / 100));
-  const surfaceW = Math.max(viewportW, drawW), surfaceH = Math.max(viewportH, drawH);
+  // A zoomed-in picture keeps its size when the stage changes (rotation, the phone keyboard
+  // opening or closing). Only a picture that showed the whole screen is fitted again.
+  const stageChanged = viewW !== layout.viewW || viewH !== layout.viewH;
+  if (state.zoom > 100 && stageChanged && layout.baseW > 0) state.zoom *= layout.baseW / baseW;
+  Object.assign(layout, { viewW, viewH, baseW, baseH });
+  state.zoom = clampZoom(state.zoom, zoomLimits());
+  sizePicture();
+  scrollToView();
+  syncZoomControls();
+}
+
+// Sizes the picture for the current zoom, in the middle of the stage when it is smaller.
+function sizePicture() {
+  const drawW = Math.max(1, Math.round(layout.baseW * state.zoom / 100)), drawH = Math.max(1, Math.round(layout.baseH * state.zoom / 100));
+  const surfaceW = Math.max(layout.viewW, drawW), surfaceH = Math.max(layout.viewH, drawH);
+  const left = Math.floor((surfaceW - drawW) / 2), top = Math.floor((surfaceH - drawH) / 2);
+  Object.assign(layout, { drawW, drawH, surfaceW, surfaceH, left, top });
   const surface = $('screenSurface');
   surface.style.width = `${surfaceW}px`;
   surface.style.height = `${surfaceH}px`;
   desktop.style.width = `${drawW}px`;
   desktop.style.height = `${drawH}px`;
-  desktop.style.left = `${Math.floor((surfaceW - drawW) / 2)}px`;
-  desktop.style.top = `${Math.floor((surfaceH - drawH) / 2)}px`;
-  // Scrollbars only when zoomed in; at 100% they just steal space from the desktop.
-  stage.classList.toggle('zoomed', state.zoom > 100 || viewMode === 'fill');
-  const scroller = $('screenScroller');
-  scroller.scrollLeft = Math.max(0, (surfaceW - viewportW) / 2);
-  scroller.scrollTop = Math.max(0, (surfaceH - viewportH) / 2);
+  desktop.style.left = `${left}px`;
+  desktop.style.top = `${top}px`;
+  // Scrollbars only when there is something to scroll; otherwise they just steal space.
+  $('desktopStage').classList.toggle('zoomed', canPan());
   placeCursor();
+}
+
+// Scrolls so that the remembered point of the picture is in the middle of the stage.
+function scrollToView() {
+  const scroller = $('screenScroller');
+  scroller.scrollLeft = scrollFor(state.viewX, layout.viewW / 2, layout.left, layout.drawW, layout.surfaceW, layout.viewW);
+  scroller.scrollTop = scrollFor(state.viewY, layout.viewH / 2, layout.top, layout.drawH, layout.surfaceH, layout.viewH);
+}
+// Remembers which point is in the middle after the view was moved.
+function rememberView() {
+  const scroller = $('screenScroller');
+  state.viewX = fractionAt(scroller.scrollLeft, layout.viewW / 2, layout.left, layout.drawW);
+  state.viewY = fractionAt(scroller.scrollTop, layout.viewH / 2, layout.top, layout.drawH);
+}
+$('screenScroller').addEventListener('scroll', rememberView, { passive: true });
+function resetView() {
+  state.zoom = 100; state.viewX = 0.5; state.viewY = 0.5; state.pointed = null; viewBeforeTyping = null;
+}
+
+// Changes the zoom. The picture point under `anchor` (a place on this device's screen) stays
+// under it; without an anchor the middle of the stage stays where it is. A pinch also passes
+// the picture point its fingers started on (pictureX/pictureY), so the picture travels with
+// the fingers.
+function setZoom(zoom, anchor) {
+  const scroller = $('screenScroller'), box = scroller.getBoundingClientRect();
+  const offsetX = anchor ? anchor.x - box.left : layout.viewW / 2, offsetY = anchor ? anchor.y - box.top : layout.viewH / 2;
+  const pictureX = anchor?.pictureX ?? fractionAt(scroller.scrollLeft, offsetX, layout.left, layout.drawW);
+  const pictureY = anchor?.pictureY ?? fractionAt(scroller.scrollTop, offsetY, layout.top, layout.drawH);
+  state.zoom = clampZoom(zoom, zoomLimits());
+  sizePicture();
+  scroller.scrollLeft = scrollFor(pictureX, offsetX, layout.left, layout.drawW, layout.surfaceW, layout.viewW);
+  scroller.scrollTop = scrollFor(pictureY, offsetY, layout.top, layout.drawH, layout.surfaceH, layout.viewH);
+  rememberView();
+  syncZoomControls();
+  scheduleResolutionRefresh();
+}
+// Zooms in on the PC's pointer, or on the middle of what is shown while its place is unknown.
+function zoomToPointer(zoom) {
+  const pointer = pointerFraction();
+  if (pointer) { state.viewX = pointer.x; state.viewY = pointer.y; }
+  state.zoom = clampZoom(zoom, zoomLimits());
+  sizePicture();
+  scrollToView();
+  syncZoomControls();
+  scheduleResolutionRefresh();
+}
+// The zoom button: one tap goes in to where text is easy to read, the next shows the whole
+// screen again.
+function toggleZoom() {
+  zoomChosen();
+  if (state.zoom > 100) setZoom(100);
+  else zoomToPointer(Math.max(200, zoomLimits().readable));
+}
+function syncZoomControls() {
+  const zoom = Math.round(state.zoom), zoomedIn = zoom > 100;
+  $('zoom').max = String(zoomLimits().max);
+  $('zoom').value = String(zoom);
+  $('zoomValue').textContent = `${zoom}%`;
+  $('quickZoom').setAttribute('aria-pressed', String(zoomedIn));
+  $('quickZoom').setAttribute('aria-label', zoomedIn ? 'Show the whole screen' : 'Zoom in on the pointer');
+}
+
+// Where the PC's pointer is on the shown monitor, as fractions of its width and height.
+// Until the host has reported it, the last place touched in Direct touch stands in; null
+// when neither is known.
+function pointerFraction() {
+  const monitor = currentMonitor();
+  if (state.separateCursor && monitor && pointerMotion.known) {
+    const x = (pointerMotion.x - monitor.x) / monitor.width, y = (pointerMotion.y - monitor.y) / monitor.height;
+    if (x >= 0 && y >= 0 && x <= 1 && y <= 1) return { x, y };
+  }
+  return state.pointed;
+}
+// Trackpad control moves a pointer the finger is not on, so a zoomed-in view goes with it.
+function followPointer() {
+  const pointer = canPan() ? pointerFraction() : null;
+  if (!pointer) return;
+  const scroller = $('screenScroller');
+  scroller.scrollLeft = followScroll(scroller.scrollLeft, layout.left + pointer.x * layout.drawW, layout.viewW, layout.surfaceW, Math.min(80, layout.viewW * 0.22));
+  scroller.scrollTop = followScroll(scroller.scrollTop, layout.top + pointer.y * layout.drawH, layout.viewH, layout.surfaceH, Math.min(80, layout.viewH * 0.22));
+}
+function panBy(dx, dy) {
+  const scroller = $('screenScroller');
+  scroller.scrollLeft -= dx;
+  scroller.scrollTop -= dy;
+}
+
+// While the phone keyboard is open the view zooms in on the pointer, which is where the
+// text box was tapped, and goes back when the keyboard closes. `viewBeforeTyping` is what to
+// go back to; it is forgotten as soon as the zoom is changed by hand.
+let viewBeforeTyping = null;
+function zoomChosen() { viewBeforeTyping = null; }
+function zoomForTyping() {
+  if (!state.typingZoom || !state.immersive) return;
+  const readable = zoomLimits().readable;
+  if (state.zoom >= readable * 0.8) return; // already large enough to read
+  viewBeforeTyping = { width: state.zoom > 100 ? layout.drawW : 0, x: state.viewX, y: state.viewY };
+  zoomToPointer(readable);
+}
+function leaveTypingZoom() {
+  const before = viewBeforeTyping;
+  viewBeforeTyping = null;
+  if (!before) return;
+  state.viewX = before.x; state.viewY = before.y;
+  state.zoom = before.width ? clampZoom(100 * before.width / layout.baseW, zoomLimits()) : 100;
+  sizePicture();
+  scrollToView();
+  syncZoomControls();
+  scheduleResolutionRefresh();
 }
 
 let layoutDebounce, resolutionDebounce;
 function scheduleResolutionRefresh() {
   clearTimeout(resolutionDebounce);
   resolutionDebounce = setTimeout(() => {
-    if (!state.active || state.keyboardOpen || state.stopped) return;
-    if (Math.abs(requestedWidth() - state.lastRequestedWidth) > 240) restartVideo();
+    // Game mode's resolution is the one picked in its settings, not the stage's.
+    if (!state.active || state.stopped || state.mode === 'game') return;
+    if (touches.size > 0) { scheduleResolutionRefresh(); return; } // not in the middle of a pinch
+    if (Math.abs(requestedWidth() - state.lastRequestedWidth) > 240) restartVideo({ quiet: true });
   }, 480);
 }
 // Re-fit the picture whenever the stage changes size for any reason: rotation, window
@@ -745,22 +901,49 @@ function absolutePointer(event) {
   const rect = desktop.getBoundingClientRect();
   const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
   const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  state.pointed = { x, y };
   const monitor = currentMonitor();
   if (state.separateCursor && monitor) queuePointer(pointerMotion.absolute(x * monitor.width, y * monitor.height, monitor));
   else pointerMoves.push('pointer', { x, y, display: state.display });
 }
 
-// Touch gestures: one-finger tap = left click; two-finger tap or a still long press = right
-// click. Hold briefly THEN move to drag; moving right away just moves the pointer.
-let dragging = false, touchedAt = 0, travel = 0, sentAt = 0;
-let dragButton = null, holdTimer = null, rightHoldTimer = null;
+// Touch gestures, anywhere on the stage. One-finger tap = left click; two-finger tap or a
+// still long press = right click. Hold briefly THEN move to drag; moving right away just
+// moves the pointer. Two fingers travelling together scroll; two fingers moving apart or
+// together zoom, and the picture goes with them. When the picture is larger than the stage,
+// Direct touch moves the picture with one finger and puts the pointer where a tap or a hold
+// lands.
+const pad = $('screenSurface');
+let dragging = false, touchStamp = 0, travel = 0, sentAt = 0;
+let dragButton = null;
 let dragReady = false, rightHeld = false, gesturePanning = false;
-let pinchStartDistance = 0, pinchStartZoom = 100, pinching = false;
-let twoFingerStart = 0, twoFingerMoved = false, twoFingerTravel = 0, twoFingerCenter = null;
+let pinchStartDistance = 0, pinchStartZoom = 100, pinchAnchor = null;
+let twoFingerKind = null, twoFingerStart = 0, twoFingerMoved = false, twoFingerCenter = null;
+let scrollFrom = 0, scrollOwed = 0;
+// Direct touch: `touchPoint` is where the finger came down, kept until it is clear whether
+// this is a tap, a hold, a swipe or the first finger of a pinch; only then does the PC's
+// pointer go anywhere. `swiping` says a swipe is moving a zoomed-in picture.
+let touchPoint = null, swiping = false;
 const touches = new Map();
+const touchTimers = new Set();
 function clearTouchTimers() {
-  clearTimeout(holdTimer); clearTimeout(rightHoldTimer);
-  holdTimer = null; rightHoldTimer = null;
+  for (const timer of touchTimers) clearTimeout(timer);
+  touchTimers.clear();
+}
+// Runs `action` once one finger has rested on the same spot for `delay` milliseconds. A page
+// that was busy does not know yet what the finger did meanwhile: its touch events are still
+// waiting. So a timer that runs late stands down (the release then decides, by the touches'
+// own times), and one that is on time takes a short second step and looks again.
+function whenStill(delay, action) {
+  const began = performance.now();
+  const still = () => dragging && !gesturePanning && !swiping && touches.size === 1 && travel < 12;
+  const later = (wait, then) => {
+    const timer = setTimeout(() => { touchTimers.delete(timer); then(); }, wait);
+    touchTimers.add(timer);
+  };
+  later(delay - 30, () => {
+    if (still() && performance.now() - began < delay + 120) later(30, () => { if (still()) action(); });
+  });
 }
 function releaseDrag() {
   clearTouchTimers(); dragReady = false;
@@ -769,10 +952,15 @@ function releaseDrag() {
   dragButton = null;
 }
 function resetTouchGesture() {
-  pinchStartDistance = 0; pinching = false;
+  pinchStartDistance = 0; pinchAnchor = null; twoFingerKind = null; scrollOwed = 0;
   touches.clear(); gesturePanning = false; twoFingerStart = 0;
-  twoFingerMoved = false; twoFingerTravel = 0; twoFingerCenter = null; rightHeld = false;
+  twoFingerMoved = false; twoFingerCenter = null; rightHeld = false;
+  touchPoint = null; swiping = false;
   releaseDrag(); dragging = false;
+}
+function onPicture(event) {
+  const box = desktop.getBoundingClientRect();
+  return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
 }
 // Game mode on a computer: "Lock mouse" hides the local pointer and sends raw movement, which
 // is what first-person games expect. The browser always releases the lock on Esc.
@@ -803,10 +991,47 @@ document.addEventListener('pointerlockchange', () => {
   if (!locked) releaseAllInput();
 });
 
-desktop.addEventListener('pointerdown', (event) => {
+// Two fingers on the stage: a pinch zooms around the point between the fingers, anything
+// else scrolls the window under the PC's pointer.
+function twoFingerMove() {
+  const [a, b] = touches.values();
+  const distance = Math.hypot(a.x - b.x, a.y - b.y);
+  const middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  if (!twoFingerKind) {
+    twoFingerKind = twoFingerGesture(distance - pinchStartDistance, Math.hypot(middle.x - twoFingerCenter.x, middle.y - twoFingerCenter.y));
+    if (!twoFingerKind) return;
+    twoFingerMoved = true;
+    if (twoFingerKind === 'pinch') {
+      // The point of the picture the fingers started on stays between them for the whole pinch.
+      const scroller = $('screenScroller'), box = scroller.getBoundingClientRect();
+      pinchAnchor = { pictureX: fractionAt(scroller.scrollLeft, twoFingerCenter.x - box.left, layout.left, layout.drawW),
+                      pictureY: fractionAt(scroller.scrollTop, twoFingerCenter.y - box.top, layout.top, layout.drawH) };
+      pinchStartDistance = distance; // zoom from here on, without a jump
+      zoomChosen();
+    }
+    scrollFrom = middle.y;
+  }
+  if (twoFingerKind === 'pinch') {
+    setZoom(pinchZoom(pinchStartZoom, pinchStartDistance, distance, zoomLimits().max), { ...pinchAnchor, x: middle.x, y: middle.y });
+    return;
+  }
+  scrollOwed += wheelUnits(middle.y - scrollFrom, pictureScale(), monitorScale());
+  scrollFrom = middle.y;
+  if (performance.now() - sentAt > 24 && Math.abs(scrollOwed) >= 1 && state.control?.bufferedAmount < 4096) {
+    const delta = Math.max(-1200, Math.min(1200, Math.round(scrollOwed)));
+    send('wheel', { delta });
+    scrollOwed -= delta; sentAt = performance.now();
+  }
+}
+
+pad.addEventListener('pointerdown', (event) => {
   if (!state.active) return;
+  // A mouse or pen only counts on the picture itself; fingers may use the whole stage.
+  if (event.pointerType !== 'touch' && event.target !== desktop) return;
   event.preventDefault();
-  desktop.focus({ preventScroll: true }); // keyboard input goes to the PC while the desktop has focus
+  // Keyboard input goes to the PC while the desktop has focus. While the typing bar is open
+  // a finger leaves the focus in its box, or the phone would put its keyboard away.
+  if (!state.keyboardOpen || event.pointerType !== 'touch') desktop.focus({ preventScroll: true });
   if (mouseLocked()) {
     dragging = true;
     dragButton = event.button >= 0 && event.button <= 4 ? event.button : 0;
@@ -815,95 +1040,86 @@ desktop.addEventListener('pointerdown', (event) => {
     return;
   }
   try { desktop.setPointerCapture(event.pointerId); } catch { /* not capturable */ }
+  const direct = $('modePick').value === 'direct';
   if (event.pointerType === 'touch') {
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (touches.size > 1) {
       if (touches.size === 2) {
-        const pair = Array.from(touches.values());
-        twoFingerCenter = { x: (pair[0].x + pair[1].x) / 2, y: (pair[0].y + pair[1].y) / 2 };
-        pinchStartDistance = Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
-        pinchStartZoom = state.zoom; pinching = false;
-        twoFingerStart = Date.now(); twoFingerMoved = false; twoFingerTravel = 0;
+        const [a, b] = touches.values();
+        twoFingerCenter = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        pinchStartDistance = Math.hypot(a.x - b.x, a.y - b.y);
+        pinchStartZoom = state.zoom; twoFingerKind = null; scrollOwed = 0;
+        twoFingerStart = event.timeStamp; twoFingerMoved = false;
       } else twoFingerMoved = true;
       gesturePanning = true;
-      releaseDrag(); dragging = false; return;
+      releaseDrag(); dragging = false; touchPoint = null; swiping = false; return;
     }
+    // Direct touch points at what is under the finger, and beside the picture there is nothing.
+    if (direct && !gesturePanning && !onPicture(event)) return;
   }
   if (gesturePanning) return; // first finger lifted during a multi-touch gesture
-  dragging = true; travel = 0; touchedAt = Date.now(); rightHeld = false;
+  dragging = true; travel = 0; touchStamp = event.timeStamp; rightHeld = false; swiping = false;
   state.lastX = event.clientX; state.lastY = event.clientY;
-  if ($('modePick').value === 'direct') absolutePointer(event);
+  // A finger may be the first of a pinch, or about to move a zoomed-in picture, so the pointer waits.
+  touchPoint = direct && event.pointerType === 'touch' ? { clientX: event.clientX, clientY: event.clientY } : null;
+  if (direct && !touchPoint) absolutePointer(event);
   if (event.pointerType === 'touch') {
     // Only arm dragging after a deliberate pause. No mouse-down is sent until the finger
     // moves, which leaves a still long-press free for right-click.
-    holdTimer = setTimeout(() => {
-      if (dragging && !gesturePanning && touches.size === 1 && travel < 12) dragReady = true;
-    }, 330);
-    rightHoldTimer = setTimeout(() => {
-      if (dragging && !gesturePanning && touches.size === 1 && travel < 12 && dragButton === null) {
-        rightHeld = true; dragReady = false; mouseClick(2);
-      }
-    }, 660);
+    whenStill(330, () => {
+      dragReady = true;
+      if (touchPoint) absolutePointer(touchPoint); // the pointer shows where a drag would start
+    });
+    whenStill(660, () => {
+      if (dragButton === null) { rightHeld = true; dragReady = false; mouseClick(2); }
+    });
   } else {
     dragButton = event.button >= 0 && event.button <= 4 ? event.button : 0; // 3/4 = back/forward
     pointerMoves.flush();
     send('mouse', { button: dragButton, action: 'down' });
   }
 });
-desktop.addEventListener('pointermove', (event) => {
+pad.addEventListener('pointermove', (event) => {
   if (!state.active) return;
   if (mouseLocked()) { queueLockedMove(event); return; }
-  if (event.pointerType === 'touch' && touches.has(event.pointerId)) {
-    const previous = touches.get(event.pointerId);
+  if (event.pointerType === 'touch') {
+    if (!touches.has(event.pointerId)) return;
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (gesturePanning) {
-      if (touches.size === 2 && pinchStartDistance > 0) {
-        const pair = [...touches.values()];
-        const distance = Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
-        if (Math.abs(distance - pinchStartDistance) > 12) pinching = true;
-        if (pinching) {
-          twoFingerMoved = true;
-          state.zoom = pinchZoom(pinchStartZoom, pinchStartDistance, distance);
-          $('zoom').value = String(state.zoom); $('zoomValue').textContent = state.zoom + '%';
-          updateScreenLayout(); scheduleResolutionRefresh(); return;
-        }
-      }
-      const deltaY = event.clientY - previous.y;
-      const deltaX = event.clientX - previous.x;
-      twoFingerTravel += Math.abs(deltaX) + Math.abs(deltaY);
-      if (twoFingerTravel > 12) twoFingerMoved = true;
-      const scroll = $('screenScroller');
-      if (state.zoom > 100) {
-        scroll.scrollLeft -= deltaX; scroll.scrollTop -= deltaY;
-      } else if (performance.now() - sentAt > 28 && Math.abs(deltaY) > 2 && state.control?.bufferedAmount < 4096) {
-        send('wheel', { delta: Math.max(-360, Math.min(360, Math.round(deltaY * 7))) });
-        sentAt = performance.now();
-      }
-      return;
-    }
-  }
+    if (gesturePanning) { if (touches.size === 2 && pinchStartDistance > 0) twoFingerMove(); return; }
+  } else if (event.target !== desktop) return;
   if (gesturePanning || rightHeld) return;
   const dx = event.clientX - state.lastX, dy = event.clientY - state.lastY;
   state.lastX = event.clientX; state.lastY = event.clientY;
   if (dragging) {
     travel += Math.abs(dx) + Math.abs(dy);
     if (event.pointerType === 'touch' && travel > 12) {
-      const startDrag = dragReady && dragButton === null;
+      // The times are the touches' own, so a page that was busy cannot mistake a swipe for a hold.
+      const startDrag = dragReady && dragButton === null && event.timeStamp - touchStamp >= 300;
       clearTouchTimers();
       if (startDrag) { pointerMoves.flush(); dragButton = 0; send('mouse', { button: 0, action: 'down' }); }
+      else if (touchPoint && dragButton === null) {
+        // No pause first: the finger moves a zoomed-in picture, or else the pointer follows it.
+        if (canPan()) swiping = true; else touchPoint = null;
+      }
       dragReady = false;
     }
   }
-  if ($('modePick').value === 'direct') absolutePointer(event);
-  else if (dragging) relativePointer(dx * 1.5, dy * 1.5);
+  if (swiping) { panBy(dx, dy); return; }
+  if ($('modePick').value === 'direct') {
+    if (event.pointerType !== 'touch' || (dragging && (!touchPoint || dragButton !== null))) absolutePointer(event);
+  } else if (dragging) {
+    const gain = trackpadGain(pictureScale());
+    relativePointer(dx * gain, dy * gain);
+  }
 });
 function pointerEnd(event) {
+  if (event.pointerType !== 'touch' && !dragging) return;
   pointerMoves.flush();
   if (event.pointerType === 'touch') touches.delete(event.pointerId);
   if (gesturePanning) {
     if (touches.size === 0) {
       // A two-finger tap is not a scroll: fire it once, after both fingers lift, with little movement.
-      if (!twoFingerMoved && twoFingerStart && Date.now() - twoFingerStart < 420) {
+      if (!twoFingerMoved && twoFingerStart && event.timeStamp - twoFingerStart < 420) {
         if ($('modePick').value === 'direct' && twoFingerCenter) absolutePointer({ clientX: twoFingerCenter.x, clientY: twoFingerCenter.y });
         mouseClick(2);
       }
@@ -914,21 +1130,29 @@ function pointerEnd(event) {
   if (!dragging) return;
   event.preventDefault(); dragging = false;
   const wasDown = dragButton !== null;
-  const wasRightHeld = rightHeld;
-  releaseDrag(); rightHeld = false;
-  if (event.pointerType === 'touch' && !wasDown && !wasRightHeld && travel < 15 && Date.now() - touchedAt < 950) mouseClick();
+  const wasRightHeld = rightHeld, wasSwiping = swiping, waited = touchPoint;
+  releaseDrag(); rightHeld = false; swiping = false; touchPoint = null;
+  if (event.pointerType === 'touch' && !wasDown && !wasRightHeld && !wasSwiping && travel < 15) {
+    if (waited) absolutePointer(event); // the pointer waited for this: it goes where the tap landed
+    // By the touches' own times: a short touch is a click. A long one that got no right-click
+    // while the finger was down (the page was busy) gets it now.
+    const held = event.timeStamp - touchStamp;
+    if (held < 660) mouseClick();
+    else if (travel < 12) mouseClick(2);
+    typingMoved();
+  }
 }
-desktop.addEventListener('pointerup', pointerEnd);
-desktop.addEventListener('pointercancel', (event) => {
+pad.addEventListener('pointerup', pointerEnd);
+pad.addEventListener('pointercancel', (event) => {
   pointerMoves.cancel(); pointerMotion.cancel(); hideCursor();
   // Cancellation (e.g. an iOS system gesture) must never produce a click.
   if (event.pointerType === 'touch') touches.delete(event.pointerId);
   twoFingerMoved = true;
   if (touches.size === 0) resetTouchGesture();
-  else { releaseDrag(); dragging = false; }
+  else { releaseDrag(); dragging = false; touchPoint = null; swiping = false; }
 });
 // Suppress iOS long-press selection and the browser's own context menu.
-desktop.addEventListener('contextmenu', (event) => event.preventDefault());
+pad.addEventListener('contextmenu', (event) => event.preventDefault());
 
 // Wheel: accumulate fine-grained trackpad deltas instead of sending a full notch per event.
 // Browsers report about 100 px per mouse-wheel notch; Windows uses 120 units per notch.
@@ -988,6 +1212,8 @@ function selectDisplay(display) {
   releaseAllInput();
   state.display = display.id;
   state.displayName = display.name;
+  resetView(); // another monitor starts with its whole screen
+  updateScreenLayout();
   showSessionName();
   saveSettings();
   restartVideo();
@@ -1050,12 +1276,8 @@ $('refresh').addEventListener('click', async () => {
 });
 $('goHome').addEventListener('click', showHome);
 $('quickHome').addEventListener('click', showHome);
-$('zoom').addEventListener('input', () => {
-  state.zoom = Number($('zoom').value);
-  $('zoomValue').textContent = `${state.zoom}%`;
-  updateScreenLayout();
-  scheduleResolutionRefresh();
-});
+$('zoom').addEventListener('input', () => { zoomChosen(); setZoom(Number($('zoom').value)); });
+$('quickZoom').addEventListener('click', toggleZoom);
 $('fitPick').addEventListener('change', () => { state.fitUserSet = true; syncQuickControls(); updateScreenLayout(); saveSettings(); });
 $('modePick').addEventListener('change', () => { syncQuickControls(); saveSettings(); });
 $('settingsToggle').addEventListener('click', () => {
@@ -1153,29 +1375,112 @@ $('sendText').addEventListener('click', sendText);
 $('textSend').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); sendText(); } });
 
 function syncKeyboardViewport() {
-  // The visual viewport shrinks when the phone keyboard opens; lift the sheet above it.
+  // The visual viewport is the part of the page the phone keyboard leaves free. The sheet
+  // sits on its lower edge and, while typing on a phone, the stage starts at its upper edge.
   const vv = window.visualViewport;
   const bottom = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
-  document.documentElement.style.setProperty('--keyboard-offset', `${Math.round(bottom)}px`);
+  const style = document.documentElement.style;
+  style.setProperty('--keyboard-offset', `${Math.round(bottom)}px`);
+  style.setProperty('--viewport-top', `${Math.round(vv ? Math.max(0, vv.offsetTop) : 0)}px`);
 }
 window.visualViewport?.addEventListener('resize', syncKeyboardViewport);
 window.visualViewport?.addEventListener('scroll', syncKeyboardViewport);
+// On a phone the stage ends above the typing bar (style.css). With "More" open the sheet
+// covers the picture instead, so its height is not passed on then.
+function syncTypingHeight() {
+  if (!state.keyboardMore) document.documentElement.style.setProperty('--typing-height', `${state.keyboardOpen ? $('keyboardSheet').offsetHeight : 0}px`);
+}
+new ResizeObserver(syncTypingHeight).observe($('keyboardSheet'));
+
 function setKeyboard(open) {
+  if (open && state.keyboardOpen) { $('liveKeys').focus({ preventScroll: true }); return; }
   state.keyboardOpen = open;
   $('keyboardSheet').classList.toggle('hidden', !open);
+  document.body.classList.toggle('typing', open);
   $('showKeyboard').setAttribute('aria-expanded', String(open));
+  $('quickType').setAttribute('aria-pressed', String(open));
   if (open) {
     if (state.monitorsOpen) setMonitorSheet(false);
     $('keyboardStatus').textContent = '';
-    $('keyboardText').focus({ preventScroll: true }); // must happen inside the tap for iOS to show its keyboard
+    resetLiveKeys();
+    $('liveKeys').focus({ preventScroll: true }); // must happen inside the tap for iOS to show its keyboard
+    syncTypingHeight();
+    updateScreenLayout(); // the stage is smaller now; zoom in on what is left of it
+    zoomForTyping();
   } else {
-    $('keyboardText').blur();
+    setKeyboardMore(false);
+    $('liveKeys').blur(); $('keyboardText').blur();
+    releaseHeldKeys(); // a Ctrl left on would turn the next taps into shortcuts
     document.documentElement.style.setProperty('--keyboard-offset', '0px');
+    syncTypingHeight();
+    updateScreenLayout();
+    leaveTypingZoom();
   }
   syncKeyboardViewport();
 }
+function setKeyboardMore(open) {
+  state.keyboardMore = open;
+  $('keyboardMorePanel').classList.toggle('hidden', !open);
+  $('keyboardMore').setAttribute('aria-expanded', String(open));
+  $('keyboardMore').textContent = open ? 'Less' : 'More';
+}
+
+// Live typing (live-typing.js has the rule). `typedSoFar` is what the box held when it was
+// last compared, its invisible beginning included.
+let typedSoFar = TYPING_GUARD, composing = false;
+function resetLiveKeys() {
+  typedSoFar = TYPING_GUARD;
+  $('liveKeys').value = TYPING_GUARD;
+  $('typingBox').classList.remove('has-text');
+}
+// The text cursor on the PC may be somewhere else now (a tap, Tab, an arrow key), so the box
+// no longer says what a Backspace would delete there.
+function typingMoved() { if (state.keyboardOpen && !composing) resetLiveKeys(); }
+function releaseHeldKeys() {
+  for (const button of document.querySelectorAll('[data-hold="true"][aria-pressed="true"]')) {
+    key(button.dataset.specialKey, 'up');
+    button.setAttribute('aria-pressed', 'false');
+  }
+}
+function typeOnPc(text) {
+  for (const part of text.split(/(\n)/)) {
+    if (part === '\n') { tapKey('Enter'); continue; }
+    if (!part) continue;
+    // With Ctrl, Alt, Shift or the Windows key held, one letter or digit makes a shortcut.
+    const held = document.querySelector('[data-hold="true"][aria-pressed="true"]');
+    const code = held && Array.from(part).length === 1 ? keyCodeFor(part) : null;
+    if (code) { tapKey(code); releaseHeldKeys(); }
+    else sendTextChunks(part);
+  }
+}
+function liveKeysChanged() {
+  const box = $('liveKeys');
+  if (state.watchOnly || state.control?.readyState !== WebSocket.OPEN) {
+    $('keyboardStatus').textContent = state.watchOnly ? WATCHING : 'Input is disconnected.';
+    if (!composing) resetLiveKeys();
+    return;
+  }
+  $('keyboardStatus').textContent = '';
+  const change = typingChange(typedSoFar, box.value);
+  for (let i = 0; i < change.backspaces; i++) tapKey('Backspace');
+  typeOnPc(change.text);
+  typedSoFar = box.value;
+  $('typingBox').classList.toggle('has-text', typedText(typedSoFar) !== '');
+  // Start again after Enter, when the invisible beginning is damaged, and before the box
+  // gets long. Never in the middle of a word the phone keyboard is still putting together.
+  if (!composing && (change.text.includes('\n') || !typedSoFar.startsWith(TYPING_GUARD) || typedSoFar.length > 240)) resetLiveKeys();
+}
+$('liveKeys').addEventListener('input', liveKeysChanged);
+$('liveKeys').addEventListener('compositionstart', () => { composing = true; });
+$('liveKeys').addEventListener('compositionend', () => { composing = false; liveKeysChanged(); });
+
+// A tap on one of the sheet's buttons must not take the focus out of the box being typed
+// in, or a phone would put its keyboard away.
+$('keyboardSheet').addEventListener('mousedown', (event) => { if (event.target.closest('button')) event.preventDefault(); });
 $('showKeyboard').addEventListener('click', () => setKeyboard(!state.keyboardOpen));
+$('quickType').addEventListener('click', () => setKeyboard(!state.keyboardOpen));
 $('closeKeyboard').addEventListener('click', () => setKeyboard(false));
+$('keyboardMore').addEventListener('click', () => setKeyboardMore(!state.keyboardMore));
 $('keyboardSend').addEventListener('click', () => {
   const text = $('keyboardText').value;
   if (!text) { $('keyboardStatus').textContent = 'Type something first.'; return; }
@@ -1183,15 +1488,8 @@ $('keyboardSend').addEventListener('click', () => {
   if (!sendTextChunks(text)) { $('keyboardStatus').textContent = 'Disconnected. Your text is kept; reconnect first.'; return; }
   $('keyboardText').value = '';
   $('keyboardStatus').textContent = 'Sent to the active window on your PC.';
+  typingMoved();
 });
-for (const [id, code] of [['keyboardTab', 'Tab'], ['keyboardEnter', 'Enter'], ['keyboardBackspace', 'Backspace']]) {
-  $(id).addEventListener('click', () => {
-    if (state.watchOnly) { $('keyboardStatus').textContent = WATCHING; return; }
-    if (state.control?.readyState !== WebSocket.OPEN) { $('keyboardStatus').textContent = 'Input is disconnected.'; return; }
-    tapKey(code);
-    $('keyboardText').focus({ preventScroll: true });
-  });
-}
 
 // Clipboard: text only, up to 4,096 characters, and only when you ask for it.
 async function readPcClipboard() { return (await api('/api/v1/clipboard')).text || ''; }
@@ -1230,13 +1528,14 @@ for (const button of document.querySelectorAll('[data-special-key]')) {
     if (button.dataset.hold === 'true') {
       const down = button.getAttribute('aria-pressed') !== 'true';
       key(code, down ? 'down' : 'up'); button.setAttribute('aria-pressed', String(down));
-    } else tapKey(code);
+    } else { tapKey(code); typingMoved(); }
   });
 }
 for (const button of document.querySelectorAll('[data-combo]')) {
   button.addEventListener('click', () => {
     if (!state.active || state.watchOnly) return;
     for (const step of shortcutSteps(button.dataset.combo)) key(step.code, step.action);
+    typingMoved();
   });
 }
 const gamepads = watchGamepads({

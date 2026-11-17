@@ -8,9 +8,9 @@ export function stickAt(x, y, rect) {
   if (length > 1) { dx /= length; dy /= length; }
   return { x: Math.round(dx * 512) / 512, y: Math.round(dy * 512) / 512 };
 }
-export function pinchZoom(startZoom, startDistance, distance) {
+export function pinchZoom(startZoom, startDistance, distance, max = 250) {
   if (startDistance <= 0 || !Number.isFinite(distance)) return startZoom;
-  return Math.round(Math.max(100, Math.min(250, startZoom * distance / startDistance)));
+  return Math.round(Math.max(100, Math.min(max, startZoom * distance / startDistance)));
 }
 // A shortcut such as "ControlLeft+ShiftLeft+Escape" becomes key presses in the order a hand
 // would make them: every key down from left to right, then up again from right to left.

@@ -39,6 +39,7 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4z"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6M11 8v6"/></symbol>
   </svg>
   <header class="bar" id="siteHeader">
     <div class="brand"><img class="logo" src="/icon-192.png" alt="" width="36" height="36"><b>Abyss Remote</b></div>
@@ -174,11 +175,15 @@
         <!-- Phones hide the line under the stage, so messages also appear here for a moment. -->
         <div id="stageNote" class="stage-note hidden" role="status"></div>
       </div>
-      <!-- Phones: the desktop fills the screen and this floating button is the only
-           always-visible control. -->
-      <button id="quickToggle" class="quick-toggle" type="button" aria-controls="quickPanel" aria-expanded="false" aria-label="Open controls">
-        <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span class="quick-toggle-label">Controls</span>
-      </button>
+      <!-- Phones: the desktop fills the screen and these floating buttons are the only
+           always-visible controls: zoom, the keyboard, and everything else. -->
+      <div id="quickDock" class="quick-dock">
+        <button id="quickZoom" class="dock-button" type="button" aria-pressed="false" aria-label="Zoom in on the pointer" title="Zoom in on the pointer, or show the whole screen again"><svg class="icon" aria-hidden="true"><use href="#i-zoom"/></svg></button>
+        <button id="quickType" class="dock-button" type="button" aria-pressed="false" aria-controls="keyboardSheet" aria-label="Keyboard" title="Type on your PC"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+        <button id="quickToggle" class="quick-toggle" type="button" aria-controls="quickPanel" aria-expanded="false" aria-label="Open controls">
+          <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span class="quick-toggle-label">Controls</span>
+        </button>
+      </div>
       <aside id="quickPanel" class="quick-panel hidden" aria-label="Stream controls">
         <div class="quick-panel-head">
           <div><strong>Controls</strong><small id="quickStatus">Connecting…</small></div>
@@ -206,7 +211,7 @@
           <button id="quickReconnect" type="button">Reconnect</button>
           <button id="quickExit" type="button">Exit screen mode</button>
         </div>
-        <p class="quick-help">Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag; swipe with two fingers to scroll. Fit shows your whole screen; Fill crops its edges.</p>
+        <p class="quick-help">Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag. Swipe with two fingers to scroll and pinch to zoom. Zoomed in, Trackpad keeps the pointer in view and Direct touch moves the picture with one finger.</p>
       </aside>
       <aside id="monitorSheet" class="sheet monitor-sheet hidden" aria-label="Monitors">
         <div class="sheet-head"><strong>Monitors</strong><button id="closeMonitors" class="icon-button" type="button" aria-label="Close monitors"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
@@ -235,37 +240,47 @@
         <button id="escapeKey" title="Escape">Esc</button><button id="tabKey" title="Tab">Tab</button><button id="enterKey" title="Enter">↵</button><button id="backspaceKey" title="Backspace">⌫</button>
         <button id="ctrlC" title="Copy (Ctrl+C)">Ctrl+C</button><button id="ctrlV" title="Paste (Ctrl+V)">Ctrl+V</button>
       </div>
+      <!-- Typing. The sheet starts as a slim bar above the phone's keyboard: a row of keys and
+           a box whose text goes straight to the PC. "More" adds the F keys, shortcuts, a box
+           for longer text and the clipboard. -->
       <section id="keyboardSheet" class="sheet keyboard-sheet hidden" aria-label="Type on the PC">
-        <div class="sheet-head"><strong>Type on your PC</strong><button id="closeKeyboard" class="icon-button" type="button" aria-label="Close keyboard"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-        <div class="special-keys" aria-label="Special keys">
-          <button type="button" data-special-key="ControlLeft" data-hold="true" aria-pressed="false">Ctrl</button><button type="button" data-special-key="AltLeft" data-hold="true" aria-pressed="false">Alt</button><button type="button" data-special-key="ShiftLeft" data-hold="true" aria-pressed="false">Shift</button><button type="button" data-special-key="MetaLeft" data-hold="true" aria-pressed="false">Win</button>
-          <button type="button" data-special-key="Escape">Esc</button><button type="button" data-special-key="Tab">Tab</button><button type="button" data-special-key="Delete">Del</button><button type="button" data-special-key="Insert">Ins</button><button type="button" data-special-key="Home">Home</button><button type="button" data-special-key="End">End</button><button type="button" data-special-key="PageUp">PgUp</button><button type="button" data-special-key="PageDown">PgDn</button>
-          <button type="button" data-special-key="ArrowLeft" aria-label="Left arrow">←</button><button type="button" data-special-key="ArrowUp" aria-label="Up arrow">↑</button><button type="button" data-special-key="ArrowDown" aria-label="Down arrow">↓</button><button type="button" data-special-key="ArrowRight" aria-label="Right arrow">→</button><button type="button" data-special-key="PrintScreen">PrtSc</button>
-          <button type="button" data-special-key="F1">F1</button><button type="button" data-special-key="F2">F2</button><button type="button" data-special-key="F3">F3</button><button type="button" data-special-key="F4">F4</button><button type="button" data-special-key="F5">F5</button><button type="button" data-special-key="F6">F6</button><button type="button" data-special-key="F7">F7</button><button type="button" data-special-key="F8">F8</button><button type="button" data-special-key="F9">F9</button><button type="button" data-special-key="F10">F10</button><button type="button" data-special-key="F11">F11</button><button type="button" data-special-key="F12">F12</button>
+        <div id="keyboardMorePanel" class="keyboard-more hidden">
+          <div class="special-keys" aria-label="More keys">
+            <button type="button" data-special-key="F1">F1</button><button type="button" data-special-key="F2">F2</button><button type="button" data-special-key="F3">F3</button><button type="button" data-special-key="F4">F4</button><button type="button" data-special-key="F5">F5</button><button type="button" data-special-key="F6">F6</button><button type="button" data-special-key="F7">F7</button><button type="button" data-special-key="F8">F8</button><button type="button" data-special-key="F9">F9</button><button type="button" data-special-key="F10">F10</button><button type="button" data-special-key="F11">F11</button><button type="button" data-special-key="F12">F12</button>
+            <button type="button" data-special-key="Insert">Ins</button><button type="button" data-special-key="PrintScreen">PrtSc</button>
+          </div>
+          <div class="special-keys" aria-label="Shortcuts">
+            <button type="button" data-combo="AltLeft+Tab">Alt+Tab</button><button type="button" data-combo="ControlLeft+ShiftLeft+Escape">Task Manager</button><button type="button" data-combo="MetaLeft+KeyD">Show desktop</button><button type="button" data-combo="AltLeft+F4">Close window</button><button type="button" data-combo="MetaLeft+ShiftLeft+KeyS">Snip</button><button type="button" data-combo="ShiftLeft+Tab">Steam overlay</button>
+          </div>
+          <p>For longer text, autocorrect or dictation: write it here, then press Send.</p>
+          <textarea id="keyboardText" rows="2" maxlength="2048" placeholder="Type or paste text here…" autocomplete="off" aria-label="Text to type on the connected PC"></textarea>
+          <div class="keyboard-actions">
+            <button id="keyboardClipGet" class="button" type="button" title="Put the PC's clipboard text into the box above">Get PC clipboard</button>
+            <button id="keyboardClipSet" class="button" type="button" title="Copy the box above to the PC's clipboard">Copy to PC clipboard</button>
+            <button id="keyboardSend" class="button primary" type="button" title="Type this text into the active PC window">Send text</button>
+          </div>
         </div>
-        <div class="special-keys" aria-label="Shortcuts">
-          <button type="button" data-combo="AltLeft+Tab">Alt+Tab</button><button type="button" data-combo="ControlLeft+ShiftLeft+Escape">Task Manager</button><button type="button" data-combo="MetaLeft+KeyD">Show desktop</button><button type="button" data-combo="AltLeft+F4">Close window</button><button type="button" data-combo="MetaLeft+ShiftLeft+KeyS">Snip</button><button type="button" data-combo="ShiftLeft+Tab">Steam overlay</button>
+        <div class="special-keys typing-keys" aria-label="Keys">
+          <button type="button" data-special-key="Escape">Esc</button><button type="button" data-special-key="Tab">Tab</button><button type="button" data-special-key="ControlLeft" data-hold="true" aria-pressed="false">Ctrl</button><button type="button" data-special-key="AltLeft" data-hold="true" aria-pressed="false">Alt</button><button type="button" data-special-key="ShiftLeft" data-hold="true" aria-pressed="false">Shift</button><button type="button" data-special-key="MetaLeft" data-hold="true" aria-pressed="false">Win</button>
+          <button type="button" data-special-key="ArrowLeft" aria-label="Left arrow">←</button><button type="button" data-special-key="ArrowUp" aria-label="Up arrow">↑</button><button type="button" data-special-key="ArrowDown" aria-label="Down arrow">↓</button><button type="button" data-special-key="ArrowRight" aria-label="Right arrow">→</button>
+          <button type="button" data-special-key="Delete">Del</button><button type="button" data-special-key="Home">Home</button><button type="button" data-special-key="End">End</button><button type="button" data-special-key="PageUp">PgUp</button><button type="button" data-special-key="PageDown">PgDn</button>
         </div>
-        <p>Click a text field on your PC first, then type here and press Send.</p>
-        <textarea id="keyboardText" rows="2" maxlength="2048" placeholder="Type or paste text here…" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Text to type on the connected PC"></textarea>
-        <div class="keyboard-actions">
-          <button id="keyboardTab" class="button" type="button" title="Send Tab key">Tab</button>
-          <button id="keyboardBackspace" class="button" type="button" title="Send Backspace">⌫</button>
-          <button id="keyboardEnter" class="button" type="button" title="Send Enter">Enter ↵</button>
-          <button id="keyboardSend" class="button primary" type="button" title="Type this text into the active PC window">Send text</button>
-        </div>
-        <div class="keyboard-actions keyboard-clipboard">
-          <button id="keyboardClipGet" class="button" type="button" title="Put the PC's clipboard text into the box above">Get PC clipboard</button>
-          <button id="keyboardClipSet" class="button" type="button" title="Copy the box above to the PC's clipboard">Copy to PC clipboard</button>
+        <div class="typing-line">
+          <label id="typingBox" class="typing-box">
+            <textarea id="liveKeys" rows="1" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="enter" aria-label="Type on the connected PC; every key goes to it at once"></textarea>
+            <span class="typing-hint" aria-hidden="true">Type here: it goes straight to your PC</span>
+          </label>
+          <button id="keyboardMore" class="button" type="button" aria-expanded="false" aria-controls="keyboardMorePanel">More</button>
+          <button id="closeKeyboard" class="icon-button" type="button" aria-label="Close keyboard"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
         <div id="keyboardStatus" class="keyboard-status" role="status" aria-live="polite"></div>
       </section>
       <div class="lowerbar" id="extraTools">
         <div class="sendline"><input id="textSend" maxlength="2048" placeholder="Type on your PC…" aria-label="Text to send to PC" autocapitalize="off" autocomplete="off" spellcheck="false" enterkeyhint="send"><button id="sendText" class="button primary" type="button">Send</button></div>
-        <div class="zoomline"><label for="zoom">Zoom</label><input id="zoom" type="range" min="100" max="250" step="10" value="100"><span id="zoomValue">100%</span><button id="copyPc" class="button" type="button">Read clipboard</button><button id="pushClipboard" class="button" type="button">Copy text to PC</button></div>
+        <div class="zoomline"><label for="zoom">Zoom</label><input id="zoom" type="range" min="100" max="400" step="5" value="100"><span id="zoomValue">100%</span><button id="copyPc" class="button" type="button">Read clipboard</button><button id="pushClipboard" class="button" type="button">Copy text to PC</button></div>
       </div>
       <div id="remoteError" class="error" role="status"></div>
-      <p class="hint">On phones the desktop takes over the screen; tap Controls for the keyboard, monitors, touch mode and Fit or Fill. iOS edge gestures stay under Apple’s control.</p>
+      <p class="hint">On phones the desktop takes over the screen, with buttons for zoom, the keyboard and Controls (monitors, touch mode, Fit or Fill). Pinch to zoom. iOS edge gestures stay under Apple’s control.</p>
     </section>
   </main>
   <dialog id="confirmDialog" class="dialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">

@@ -14,7 +14,7 @@ more than feature count.
 3. Do not weaken TLS, the Origin and CSRF checks, cookie flags, pairing limits, revocation or
    the private-address filter for convenience.
 4. Run everything with `BUILD-AND-TEST.bat` (or `.\scripts\Build-And-Test.ps1`): the .NET unit
-   and integration tests, the eight browser client check files (`tests\web\*-checks.mjs`), the
+   and integration tests, the browser client check files (`tests\web\*-checks.mjs`), the
    publish and the published program's self-test. The publish makes a small
    `dist\win-x64\AbyssRemote.exe` that runs on the .NET 10 runtime installed on the PC, and it
    downloads nothing. Add `-SelfContained` for the standalone program that the GitHub Actions

@@ -9,6 +9,34 @@
 - Cursor snapshots use the existing authenticated control socket. Legacy clients retain
   the cursor embedded in Desktop-mode video. Actual screen updates still depend on
   capture rate, network latency and decoding; this change does not eliminate those delays.
+- Fixed: the phone showed no mouse pointer at all while a cursor-hiding program ran on the
+  PC. Such a program gives a system cursor a blank picture without changing its handle, and
+  the host only looked at a cursor again when the handle changed. The host now looks about
+  ten times a second and reports a blank picture as "no pointer", and the page keeps the
+  pointer in the video until it has a picture it can draw.
+- Zoom on phones. A pinch anywhere on the stage zooms around the fingers and carries the
+  picture with them, up to twice the size at which text is as large as in a phone app (at
+  least 400%; it was 250% and always went back to the middle). A zoom button goes to that
+  readable size at the pointer, and back. Zoomed in, Trackpad keeps the pointer in view and
+  Direct touch moves the picture with one finger; two fingers always scroll. Trackpad speed
+  and two-finger scrolling follow the zoom, and Desktop mode asks for a sharper picture as
+  the zoom grows, without the "Switching…" overlay.
+- Typing on phones. The keyboard sheet starts as a slim bar above the phone's keyboard. Each
+  key goes to the PC as it is typed, Backspace and Enter included; a correction made by the
+  phone's keyboard is sent as Backspaces and the new ending. The picture ends above the bar
+  and zooms in on the pointer (the new "Zoom to type" switch turns that off). A held Ctrl,
+  Alt, Shift or Win makes a shortcut of the next typed letter and is then released. "More"
+  holds F1–F12, the shortcuts, the box for longer text and the clipboard.
+- Touches are told apart by their own time stamps, so a page that is busy for a moment cannot
+  turn a swipe into a drag or a tap into a right-click. In Direct touch the pointer waits
+  until a touch is known to be a tap, a hold or a swipe, so the first finger of a pinch no
+  longer moves it.
+- `GET /api/v1/displays` also reports each monitor's Windows scaling (`scale`). The picture's
+  sharpness is adjusted in Desktop mode only; Game mode keeps the size chosen in its settings.
+- 424 tests pass and 2 are skipped; eleven Node check files (`view-checks.mjs` and
+  `typing-checks.mjs` are new). The demo server has a mouse pointer and, like the real
+  screen, reports when nothing changed. The zoom, the typing bar and the pointer fix were
+  tried in a phone-sized Chromium with emulated touches, not yet on a real phone.
 
 ## 1.1.0 — 2026-11-14
 

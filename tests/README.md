@@ -62,6 +62,9 @@ Get-ChildItem tests\web\*-checks.mjs | ForEach-Object { node $_.FullName }
 | `library-checks.mjs` | Filtering the games list and how many games are shown at first |
 | `files-checks.mjs` | Tidying file names so the PC accepts them (the PC's own rule is written out again in the check), sizes and dates as text |
 | `touch-checks.mjs` | The on-screen sticks, pinch zoom arithmetic and the key order of shortcuts |
+| `pointer-checks.mjs` | The page's own pointer: movement shows before the host replies, old replies cannot pull it back, no travel is lost between frames, and the video keeps its pointer until a picture can be drawn |
+| `view-checks.mjs` | How far the picture may be zoomed, keeping the point under a finger in place, following the pointer, telling a pinch from a scroll, trackpad and scroll speed |
+| `typing-checks.mjs` | Live typing: the Backspaces and text a change in the typing box becomes, including a correction by the phone's keyboard, an emoji, Enter and Backspace in an empty box |
 | `adaptive-checks.mjs` | The automatic bitrate rule |
 | `rumble-checks.mjs` | Rumble values are bounded and reach only their controller |
 
@@ -118,8 +121,9 @@ writes `checks.txt` with the real, read-only "Phone setup" results of the PC.
 ## Manual testing still needed
 
 - On an iPhone or iPad: the certificate download and trust, scanning the QR code, pairing,
-  touch gestures and pinch zoom, the on-screen gamepad, Game mode decoding, sound, and the
-  Home Screen app.
+  touch gestures and pinch zoom, the view following the pointer, the typing bar with the
+  phone's own keyboard (how the page moves when it opens, corrections, Backspace in an empty
+  box), the on-screen gamepad, Game mode decoding, sound, and the Home Screen app.
 - With the ViGEmBus driver installed on the PC: a real controller, the on-screen gamepad in a
   game, and rumble.
 - Home-network mode: the firewall rule, the address in the QR code, a second device.
