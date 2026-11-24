@@ -36,7 +36,8 @@
 - 424 tests pass and 2 are skipped; eleven Node check files (`view-checks.mjs` and
   `typing-checks.mjs` are new). The demo server has a mouse pointer and, like the real
   screen, reports when nothing changed. The zoom, the typing bar and the pointer fix were
-  tried in a phone-sized Chromium with emulated touches, not yet on a real phone.
+  tried in a phone-sized Chromium with emulated touches and then used on an iPhone, where
+  they worked. That was everyday use, not a pass through every gesture.
 
 ## 1.1.0 — 2026-11-14
 

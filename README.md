@@ -54,9 +54,10 @@ emulated touches against the demo server.
 - **A real phone or tablet.** For 1.1 the phone layout, touch gestures, the on-screen gamepad
   and the Home Screen app were only tried in a phone-sized Chromium window. Since then the
   app has been used from a phone on the home network (pairing, the stream and touch control),
-  which is how the missing mouse pointer was found. Nothing was measured there, and the
-  pointer fix, the zoom and the typing bar that followed have only been tried in Chromium
-  with emulated touches.
+  which is how the missing mouse pointer was found. The pointer fix, the zoom and the typing
+  bar that followed were checked in Chromium with emulated touches and then used on that
+  phone, an iPhone, where they worked. That was everyday use: nothing was measured, and
+  nobody went through every gesture.
 - **Home-network mode** has the same standing: in use from one phone, checked by unit tests,
   never measured.
 - **Controllers.** The ViGEmBus driver is installed on the development PC now, but physical
