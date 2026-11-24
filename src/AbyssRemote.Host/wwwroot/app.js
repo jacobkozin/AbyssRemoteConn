@@ -293,7 +293,7 @@ function connect() {
 // the top bar and one in the phone's Controls panel, so a new switch (an on-screen gamepad,
 // special keys) only has to be added here.
 const toggles = [
-  { id: 'touchpad', icon: 'keyboard', label: 'Touch gamepad', hint: 'On-screen controller; needs ViGEmBus on the PC',
+  { id: 'touchpad', icon: 'keyboard', label: 'Touch gamepad', short: 'Gamepad', hint: 'On-screen controller; needs ViGEmBus on the PC',
     isOn: () => state.touchPad, flip: () => {
       releaseAllInput(); state.touchPad = !state.touchPad;
       $('touchPad').classList.toggle('hidden', !state.touchPad);
@@ -316,7 +316,9 @@ function buildToggles() {
       button.dataset.toggle = toggle.id;
       const shown = el('span', 'toggle-state');
       shown.setAttribute('aria-hidden', 'true'); // aria-pressed already says it
-      button.append(icon(toggle.icon), el('span', '', toggle.label), shown);
+      // The phone's Controls panel is narrow, so a switch may have a shorter name there.
+      const name = className ? toggle.label : toggle.short ?? toggle.label;
+      button.append(icon(toggle.icon), el('span', '', name), shown);
       button.addEventListener('click', toggle.flip);
       return button;
     }));

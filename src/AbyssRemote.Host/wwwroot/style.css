@@ -1,20 +1,41 @@
 /* Abyss Remote browser client: the shared look, the pairing screen and the stream view.
+   The look is the Abyss game style: ocean-coloured faces, one dark outline per box, a darker
+   "lip" under anything that can be pressed, round pills, and light text on dark faces.
    Sections: theme, base, header, buttons, pairing, stream view, desktop stage, control bars,
-   keyboard sheet, phone "immersive" mode, small screens, reduced motion. */
+   sheets and typing, phone "immersive" mode, small screens, reduced motion, on-screen gamepad. */
 
 :root {
   color-scheme: dark;
-  --bg: #0a0e17;
-  --surface: #131a2a;
-  --raised: #1a2338;
-  --border: #24304a;
-  --text: #e6edf7;
-  --muted: #8a97b1;
-  --accent: #38bdf8;
-  --accent-2: #3b82f6;
-  --success: #34d399;
-  --warning: #f0b95f;
-  --danger: #f87171;
+  /* Structure */
+  --abyss: #0b2838;   /* outlines, lips, text on bright faces */
+  --deep: #123d52;    /* text boxes, quiet faces */
+  --lagoon: #1b5b74;  /* buttons, pills and rows at rest */
+  /* What can be pressed, and what something means */
+  --teal: #27b9cc;    /* the main button of a screen; anything switched on */
+  --aqua: #7fe6f2;    /* small labels, links, the focus ring */
+  --seafoam: #70d69b; /* good: connected, done */
+  --gold: #ffc65b;    /* waiting, a notice */
+  --coral: #ff7968;   /* errors, and things that cannot be undone */
+  /* Text */
+  --foam: #f4fbfd;    /* on dark faces */
+  --mist: #a9c4d0;    /* quieter text */
+  /* The page, and the faces of panels and cards (lit from above) */
+  --page: #05131d;
+  --panel-face: linear-gradient(180deg, #1b5b74 0%, #123d52 46%, #0d3042 100%);
+  --card-face: linear-gradient(180deg, #1f647f 0%, #16485f 100%);
+  --row-face: rgba(27, 91, 116, .62);
+  /* Shape: the outline, the corners, and the lip (a hard shadow straight down) */
+  --stroke-card: 3px;
+  --stroke: 2px;
+  --radius-panel: 26px;
+  --radius-card: 18px;
+  --radius-button: 16px;
+  --radius-small: 10px;
+  --radius-pill: 999px;
+  --lip-card: 6px;
+  --lip-button: 5px;
+  --lip-small: 3px;
+  /* Kept up to date by app.js while the phone keyboard is open */
   --keyboard-offset: 0px;
   --viewport-top: 0px;
   --typing-height: 0px;
@@ -22,127 +43,154 @@
 
 /* Base */
 * { box-sizing: border-box; }
-html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; background-color: var(--page); scrollbar-color: var(--lagoon) var(--abyss); }
 html, body {
   margin: 0;
   min-height: 100%;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--foam);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-p { color: var(--muted); line-height: 1.6; }
-a { color: var(--accent); }
+/* The ocean page: dark water with a little light coming in from above. */
+body {
+  background-color: var(--page);
+  background-image: radial-gradient(ellipse 90% 50% at 50% -6%, rgba(39, 185, 204, .2) 0%, rgba(39, 185, 204, 0) 62%),
+    linear-gradient(180deg, #0b2838 0%, #081e2c 40%, #05131d 100%);
+  background-attachment: fixed;
+}
+p { color: var(--mist); line-height: 1.6; }
+a { color: var(--aqua); }
 button, input, select, textarea { font: inherit; color: inherit; }
 /* Controls are not text: a long press must not select their label, and a tap must not wait
    to see whether it becomes a double-tap zoom. */
 button, summary, a.button { cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 button:disabled { opacity: .5; cursor: default; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: 3px solid var(--aqua); outline-offset: 2px; }
 .hidden { display: none !important; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-/* 16px keeps iOS from zooming the page when a field gets focus. */
-input, select, textarea { min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); font-size: 16px; }
-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+/* The end of a label that only fits where there is room for it. */
+@media (max-width: 480px) { .when-wide { display: none; } }
+/* Text boxes and menus are dark faces set into their panel. 16px keeps iOS from zooming the
+   page when one gets focus. */
+input, select, textarea { min-width: 0; min-height: 44px; padding: 10px 12px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background-color: var(--deep); color: var(--foam); font-size: 16px; box-shadow: inset 0 2px 0 rgba(0, 0, 0, .22); }
+input::placeholder, textarea::placeholder { color: var(--mist); opacity: .85; }
+/* What is typed is lighter than the labels around it, and the focus ring hugs the box. */
+input, select, textarea { font-weight: 600; }
+:is(input, select, textarea):focus-visible { outline-offset: 1px; }
+label { font-size: 13px; font-weight: 800; color: var(--aqua); }
 .icon { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-/* Header */
+/* Header: one solid band, so nothing shows through it. */
 .bar {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   padding: calc(10px + env(safe-area-inset-top, 0px)) calc(clamp(14px, 2.5vw, 32px) + env(safe-area-inset-right, 0px)) 10px calc(clamp(14px, 2.5vw, 32px) + env(safe-area-inset-left, 0px));
-  border-bottom: 1px solid var(--border); background: var(--surface);
+  border-bottom: var(--stroke) solid var(--abyss); background: #040c18;
 }
 .brand { display: flex; gap: 10px; align-items: center; font-size: 16px; white-space: nowrap; }
+.brand b { font-weight: 900; }
 .logo { display: block; width: 36px; height: 36px; border-radius: 9px; }
-.status { font-size: 13px; color: var(--muted); }
-.status::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--warning); }
-.status.connected::before { background: var(--success); }
+.status { font-size: 13px; font-weight: 700; color: var(--mist); }
+.status::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--abyss); }
+.status.connected::before { background: var(--seafoam); }
 main {
   width: 100%;
   padding: 16px calc(clamp(12px, 2vw, 28px) + env(safe-area-inset-right, 0px)) 16px calc(clamp(12px, 2vw, 28px) + env(safe-area-inset-left, 0px));
 }
-footer { margin: 8px 0 calc(18px + env(safe-area-inset-bottom, 0px)); text-align: center; color: var(--muted); font-size: 12px; }
+footer { margin: 8px 0 calc(18px + env(safe-area-inset-bottom, 0px)); text-align: center; color: var(--mist); font-size: 12px; }
 
-/* Buttons */
+/* Buttons. Everything that can be pressed is a face with one outline and a lip under it;
+   pressing sinks it 2px into the lip. The lip is a shadow, so each button also keeps that
+   much room below itself (--lip). Lagoon is the ordinary button, teal the one main action of
+   a screen, coral what cannot be undone. */
+.button, .toolbutton, .controlbar button, .icon-button, .quick-panel button, .special-keys button, .quick-toggle, .dock-button {
+  --lip: var(--lip-small);
+  border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small);
+  background-color: var(--lagoon); color: var(--foam); font-weight: 800;
+  box-shadow: 0 var(--lip) 0 0 var(--abyss); margin-bottom: var(--lip);
+  transition: transform .08s ease-out, box-shadow .08s ease-out, filter .12s ease-out;
+}
+:is(.button, .toolbutton, .controlbar button, .icon-button, .quick-panel button, .special-keys button, .quick-toggle, .dock-button):active:not(:disabled) {
+  transform: translateY(2px); box-shadow: 0 calc(var(--lip) - 2px) 0 0 var(--abyss);
+}
 .button, .toolbutton, .controlbar button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 44px; padding: 9px 14px; border: 1px solid var(--border); border-radius: 10px;
-  background: var(--raised); color: var(--text); font-weight: 600; text-decoration: none;
-  transition: background-color .12s ease-out, transform .12s ease-out;
+  min-height: 44px; padding: 8px 14px; text-decoration: none;
 }
-/* The one main action of a screen or dialog: the icon's blue-to-cyan. */
-.button.primary { border-color: transparent; background: var(--accent) linear-gradient(110deg, var(--accent), var(--accent-2)); color: #04121f; font-weight: 700; }
-.button.danger { color: var(--danger); }
-.button.primary.danger { background: var(--danger); color: #230707; }
-.icon-button { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); color: var(--text); transition: background-color .12s ease-out, transform .12s ease-out; }
-.icon-button.danger { color: var(--danger); }
-.button:active, .toolbutton:active, .controlbar button:active, .icon-button:active { transform: scale(.97); }
+.button { --lip: var(--lip-button); border-radius: var(--radius-button); }
+.button.primary { background-color: var(--teal); color: var(--abyss); font-weight: 900; }
+.button.danger, .button.primary.danger { background-color: var(--coral); color: var(--abyss); }
+.icon-button { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; }
+.icon-button.danger { background-color: var(--coral); color: var(--abyss); }
 /* Hover only where there is a mouse: on a touch screen it would stick after a tap. */
 @media (hover: hover) and (pointer: fine) {
-  .button:not(.primary):hover, .toolbutton:hover, .controlbar button:hover, .icon-button:hover { background: #22304b; }
-  .button.primary:hover { filter: brightness(1.08); }
+  :is(.button, .toolbutton, .controlbar button, .icon-button, .quick-panel button, .special-keys button, .quick-toggle, .dock-button):hover:not(:disabled) { filter: brightness(1.1); }
 }
 
 /* The "are you sure?" box (dialog.js) */
-.dialog { width: min(420px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); }
-.dialog::backdrop { background: #04070dcc; }
+.dialog { width: min(420px, calc(100vw - 32px)); padding: 0; border: var(--stroke-card) solid var(--abyss); border-radius: var(--radius-panel); background: var(--panel-face); color: var(--foam); box-shadow: 0 var(--lip-card) 0 0 var(--abyss), 0 30px 70px rgba(0, 0, 0, .4); }
+.dialog::backdrop { background: rgba(2, 9, 14, .8); }
 .dialog-box { padding: 20px; }
-.dialog h2 { margin: 0 0 8px; font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; }
+.dialog h2 { margin: 0 0 8px; font-size: 18px; font-weight: 900; line-height: 1.3; overflow-wrap: anywhere; }
 .dialog p { margin: 0 0 20px; }
 .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 
-/* Pairing */
+/* Pairing, and the "Away from home" screen that shares its card */
 .pair-view { display: flex; justify-content: center; padding: 3vh 0; }
-.pair-card { width: min(100%, 460px); padding: clamp(20px, 5vw, 36px); border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
+.pair-card { width: min(100%, 460px); margin-bottom: var(--lip-card); padding: clamp(20px, 5vw, 36px); border: var(--stroke-card) solid var(--abyss); border-radius: var(--radius-panel); background: var(--panel-face); box-shadow: 0 var(--lip-card) 0 0 var(--abyss), 0 30px 70px rgba(0, 0, 0, .4); }
 .hero-icon { display: block; width: 64px; height: 64px; border-radius: 16px; }
-h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: clamp(26px, 4vw, 34px); }
+h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: clamp(26px, 4vw, 34px); font-weight: 900; }
 .pair-card form { display: grid; gap: 8px; margin-top: 20px; }
 .pair-card input { margin-bottom: 10px; }
 .pair-card input#pairCode { font-size: 26px; letter-spacing: 5px; text-align: center; font-variant-numeric: tabular-nums; }
 .pair-card input#awayCode { font-size: 22px; letter-spacing: 3px; text-align: center; text-transform: uppercase; }
-.help { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; }
-.help summary { min-height: 44px; padding: 11px 14px; font-weight: 600; }
+.help { margin-top: 18px; margin-bottom: var(--lip-small); border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background: var(--row-face); box-shadow: 0 var(--lip-small) 0 0 var(--abyss); }
+.help summary { min-height: 44px; padding: 10px 14px; font-weight: 800; }
 .help > :not(summary) { margin: 0 14px 12px; }
-.help ol { padding-left: 20px; color: var(--muted); }
+.help ol { padding-left: 20px; color: var(--mist); }
 .help li { margin-bottom: 6px; }
 /* A taller tap area for the link without making its line taller. */
 .help a { display: inline-block; margin: -12px 0; padding: 12px 0; }
 .footnote { margin-bottom: 0; font-size: 13px; }
-.error { min-height: 8px; margin: 0; color: var(--danger); font-size: 13px; }
+.error { min-height: 8px; margin: 0; color: var(--coral); font-size: 13px; font-weight: 700; }
 
 /* Stream view */
 .remote { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .session-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .session-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.session-title strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
-#streamStats { display: block; font-size: 13px; color: var(--muted); }
+.session-title strong { display: block; font-size: 15px; font-weight: 900; overflow-wrap: anywhere; }
+#streamStats { display: block; font-size: 13px; color: var(--mist); }
 .session-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .toolbutton { font-size: 14px; white-space: nowrap; }
 /* The on/off switches (built by app.js) sit in the row like any other button. A switch that
-   is on is drawn in the accent color; the small "On"/"Off" repeats it in words. */
+   is on has the teal face; the small "On"/"Off" repeats it in words. */
 .toggle-group { display: contents; }
-.toolbutton[aria-pressed="true"], .quick-toggles button[aria-pressed="true"] { border-color: var(--accent); background: #38bdf81f; color: var(--accent); }
-.toggle-state { font-weight: 400; color: var(--muted); }
+.toolbutton[aria-pressed="true"], .quick-toggles button[aria-pressed="true"] { background-color: var(--teal); color: var(--abyss); }
+.toggle-state { font-weight: 700; color: var(--mist); }
 [aria-pressed="true"] > .toggle-state { color: inherit; }
-.toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+/* With room for their words, the switches in the top bar are one width, On or Off at the end. */
+@media (min-width: 701px) {
+  .toolbutton[data-toggle] { min-width: 190px; justify-content: flex-start; }
+  .toolbutton[data-toggle] > .toggle-state { margin-left: auto; }
+}
+.toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: var(--lip-button); padding: 12px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-card); background: var(--card-face); box-shadow: 0 var(--lip-button) 0 0 var(--abyss); }
 .toolbar label { display: flex; flex-direction: column; gap: 5px; min-width: 110px; }
 .toolbar select { max-width: 190px; }
 
 /* Desktop stage: the canvas is sized and centered by app.js (Fit, Fill, Stretch, zoom). */
-.desktop-stage { position: relative; width: 100%; height: clamp(320px, 68dvh, 1150px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: #03060c; isolation: isolate; }
+.desktop-stage { position: relative; width: 100%; height: clamp(320px, 68dvh, 1150px); overflow: hidden; border: var(--stroke-card) solid var(--abyss); border-radius: var(--radius-card); background: #02090e; isolation: isolate; }
 .screen-scroller { position: absolute; inset: 0; overflow: hidden; overscroll-behavior: contain; touch-action: pan-x pan-y; }
 .desktop-stage.zoomed .screen-scroller { overflow: auto; scrollbar-width: thin; }
 /* touch-action none: fingers anywhere on the stage are gestures for app.js (pinch, scroll, trackpad). */
 .screen-surface { position: relative; width: 100%; height: 100%; min-width: 100%; min-height: 100%; touch-action: none; }
-.screen-surface canvas { position: absolute; display: block; max-width: none; outline: none; touch-action: none; cursor: crosshair; background: #05080f; user-select: none; -webkit-user-select: none; }
-.screen-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; color: var(--muted); background: #0a0e17e0; pointer-events: none; }
+.screen-surface canvas { position: absolute; display: block; max-width: none; outline: none; touch-action: none; cursor: crosshair; background: #02090e; user-select: none; -webkit-user-select: none; }
+.screen-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; color: var(--mist); font-weight: 700; background: rgba(5, 19, 29, .9); pointer-events: none; }
 /* Game mode draws the PC's mouse pointer here instead of inside the video. */
 .remote-cursor { position: absolute; left: 0; top: 0; will-change: transform; z-index: 2; max-width: none; pointer-events: none; user-select: none; -webkit-user-select: none; }
-body.pointer-locked .desktop-stage { border-color: var(--accent); }
+body.pointer-locked .desktop-stage { border-color: var(--teal); }
 /* Shown on the picture for as long as Watch only is on. */
-.watch-badge { position: absolute; z-index: 3; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 9px; border: 1px solid var(--accent); border-radius: 99px; background: #0a0e17e6; color: var(--accent); font-size: 13px; font-weight: 700; pointer-events: none; }
+.watch-badge { position: absolute; z-index: 3; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 9px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-pill); background: var(--aqua); color: var(--abyss); font-size: 12px; font-weight: 900; pointer-events: none; }
 /* Messages over the picture: only in the phone layout, where the line under the stage is hidden. */
-.stage-note { display: none; position: absolute; z-index: 3; top: 48px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(90%, 520px); padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: #0a0e17e6; color: var(--text); font-size: 13px; text-align: center; pointer-events: none; }
+.stage-note { display: none; position: absolute; z-index: 3; top: 48px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(90%, 520px); padding: 8px 12px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background: var(--deep); color: var(--foam); font-size: 13px; font-weight: 700; text-align: center; pointer-events: none; }
 body.immersive .stage-note { display: block; }
 
 /* Settings that only apply to one stream mode. */
@@ -152,69 +200,90 @@ body:not(.game-mode) .game-only, body.game-mode .desktop-only { display: none !i
 /* Control bars under the stage */
 .controlbar { display: flex; gap: 8px; padding: 2px 0 5px; overflow-x: auto; scrollbar-width: thin; }
 .controlbar button { min-width: 48px; white-space: nowrap; }
-.controlbar button span { font-weight: 400; }
-.controlbar .keyboard-trigger { border-color: var(--accent); color: var(--accent); }
-.controlbar .keyboard-trigger span { font-weight: 600; }
-.lowerbar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
-.sendline, .zoomline { display: flex; gap: 8px; align-items: center; }
+.controlbar button span { font-weight: 700; }
+.controlbar .keyboard-trigger { background-color: var(--teal); color: var(--abyss); }
+.controlbar .keyboard-trigger span { font-weight: 900; }
+.lowerbar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-start; }
+/* Tops line up: a button is as tall as a text box, plus the lip under it. */
+.sendline, .zoomline { display: flex; gap: 8px; align-items: flex-start; }
 .sendline { flex: 1 1 280px; }
 .sendline input { width: 100%; }
 .zoomline { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
-.zoomline input { width: 110px; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+.zoomline label, .zoomline span { line-height: 44px; }
+.zoomline span { font-weight: 800; }
+.zoomline input { width: 110px; padding: 0; border: 0; background: none; box-shadow: none; accent-color: var(--teal); }
 .zoomline button { white-space: nowrap; }
 .hint { margin: 0; font-size: 13px; }
 
 /* Sheets: panels that float over the stream (the keyboard, the monitor switcher). */
-.sheet { position: fixed; z-index: 30; right: 14px; bottom: calc(14px + var(--keyboard-offset)); width: min(520px, calc(100vw - 28px)); max-height: min(80dvh, 640px); padding: 16px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 12px 40px #0009; }
+.sheet { position: fixed; z-index: 30; right: 14px; bottom: calc(20px + var(--keyboard-offset)); width: min(520px, calc(100vw - 28px)); max-height: min(80dvh, 640px); padding: 16px; overflow: auto; overscroll-behavior: contain; border: var(--stroke-card) solid var(--abyss); border-radius: var(--radius-card); background: var(--panel-face); box-shadow: 0 var(--lip-card) 0 0 var(--abyss), 0 24px 60px rgba(0, 0, 0, .5); }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
-.sheet-head strong { font-size: 17px; }
+.sheet-head strong { font-size: 18px; font-weight: 900; }
 .monitor-sheet { width: min(640px, calc(100vw - 28px)); }
 .keyboard-sheet p { margin: 0 0 10px; font-size: 13px; }
 .keyboard-sheet textarea { display: block; width: 100%; min-height: 68px; max-height: 145px; resize: vertical; line-height: 1.4; overscroll-behavior: contain; }
-.keyboard-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-.keyboard-actions .primary { margin-left: auto; }
-.keyboard-clipboard button { flex: 1; }
-.keyboard-status { margin-top: 8px; font-size: 13px; color: var(--accent); }
+/* The two clipboard buttons share a row; Send, the main one, has a row of its own. */
+.keyboard-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.keyboard-actions .button { padding-inline: 10px; font-size: 14px; }
+.keyboard-actions .primary { grid-column: 1 / -1; font-size: 15px; }
+.keyboard-status { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--gold); }
 .keyboard-status:empty { display: none; }
 /* Typing. The sheet starts as a slim bar: a row of keys and a box whose text goes straight
    to the PC. "More" opens the rest above it (F keys, shortcuts, a box for longer text). */
 .keyboard-sheet { padding: 8px; }
 .keyboard-more { padding: 4px 4px 0; }
+.special-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.special-keys button { min-width: 44px; min-height: 44px; padding: 0 10px; font: inherit; font-weight: 800; }
+/* A held Ctrl, Alt, Shift or Win is switched on, so it is teal. */
+.special-keys button[aria-pressed="true"] { background-color: var(--teal); color: var(--abyss); }
+/* In "More" the keys stand in even rows: seven F keys across, three shortcuts across. */
+.special-keys.key-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.special-keys.shortcut-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.special-keys:is(.key-grid, .shortcut-grid) button { min-width: 0; padding: 0 4px; font-size: 13px; }
 .special-keys.typing-keys { flex-wrap: nowrap; margin: 0 0 6px; overflow-x: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .typing-keys::-webkit-scrollbar { display: none; }
 .typing-keys button { flex: none; }
-.typing-line { display: flex; gap: 6px; align-items: center; }
+.typing-line { display: flex; gap: 6px; align-items: flex-start; }
 .typing-line .button { min-height: 44px; }
 .typing-box { position: relative; flex: 1; min-width: 0; }
-#liveKeys { display: block; width: 100%; height: 44px; min-height: 44px; max-height: 44px; padding: 10px 12px; overflow: hidden; resize: none; line-height: 22px; white-space: nowrap; }
-.typing-hint { position: absolute; top: 0; right: 12px; bottom: 0; left: 13px; overflow: hidden; color: var(--muted); line-height: 44px; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
+#liveKeys { display: block; width: 100%; height: 44px; min-height: 44px; max-height: 44px; padding: 9px 12px; overflow: hidden; resize: none; line-height: 22px; white-space: nowrap; }
+.typing-hint { position: absolute; top: 0; right: 12px; bottom: 0; left: 14px; overflow: hidden; color: var(--mist); font-size: 15px; font-weight: 400; line-height: 44px; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
 .typing-box.has-text .typing-hint { display: none; }
 
 /* Floating controls (only shown in immersive mode) */
 .quick-dock, .quick-panel { display: none; }
 .quick-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .quick-panel-head > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.quick-panel-head strong { font-size: 17px; }
-.quick-panel-head small { font-size: 13px; color: var(--muted); }
-.quick-panel button { min-height: 44px; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
-.quick-primary, .quick-toggles, .quick-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.quick-primary button, .quick-toggles button { display: flex; align-items: center; justify-content: center; gap: 7px; }
-.quick-primary button.quick-accent { border-color: var(--accent); color: var(--accent); }
-.quick-primary button.quick-wide { grid-column: span 2; }
-.quick-options label { display: flex; flex-direction: column; gap: 5px; }
+.quick-panel-head strong { font-size: 18px; font-weight: 900; }
+.quick-panel-head small { font-size: 13px; color: var(--mist); }
+.quick-panel button { min-height: 44px; padding: 8px; font-size: 13px; }
+/* The things to do: Keyboard across the top, then six even tiles with the icon over the word. */
+.quick-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.quick-primary button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 56px; font-size: 12px; line-height: 1.2; }
+.quick-primary button.quick-wide { grid-column: 1 / -1; flex-direction: row; gap: 8px; min-height: 46px; font-size: 15px; }
+.quick-primary button.quick-accent { background-color: var(--teal); color: var(--abyss); font-weight: 900; }
+/* The switches: four even pills, the name on the left and On or Off on the right. */
+.quick-toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.quick-toggles button { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 12px; border-radius: var(--radius-pill); }
+.quick-toggles .icon { display: none; }
+.quick-toggles button > span:not(.toggle-state) { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.quick-toggles .toggle-state { flex: none; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+/* The menus share each row evenly; an odd one out takes a whole row. */
+.quick-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-options label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 calc(50% - 4px); min-width: 120px; }
 .quick-options select { width: 100%; max-width: none; }
-.quick-bottom { display: flex; gap: 8px; }
-.quick-bottom button { flex: 1; }
-.quick-help { margin: 0; font-size: 13px; line-height: 1.5; }
+.quick-bottom { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.quick-help { margin-top: 0; }
+.quick-help p { font-size: 13px; line-height: 1.5; }
 
 /* Immersive (phone) mode: the stream fills the screen inside a thin frame that keeps the
    desktop edges away from iOS gesture zones. A web page cannot hide iOS system gestures or,
    on iPhone, Safari's own bars; "Add to Home Screen" gives the most room. */
 html.remote-immersive, html.remote-immersive body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
-body.immersive { overflow: hidden; background: #000; overscroll-behavior: none; }
+body.immersive { overflow: hidden; background: var(--page); overscroll-behavior: none; }
 body.immersive .bar, body.immersive footer, body.immersive .session-head, body.immersive .toolbar,
 body.immersive .controlbar, body.immersive .lowerbar, body.immersive .hint, body.immersive #remoteError { display: none !important; }
-body.immersive main { position: fixed; inset: 0; z-index: 10; margin: 0; padding: 0; overflow: hidden; touch-action: manipulation; background: var(--bg); }
+body.immersive main { position: fixed; inset: 0; z-index: 10; margin: 0; padding: 0; overflow: hidden; touch-action: manipulation; background: var(--page); }
 body.immersive .remote { position: absolute; inset: 0; display: block; height: 100%; min-height: 0; }
 body.immersive .desktop-stage {
   position: absolute;
@@ -225,9 +294,9 @@ body.immersive .desktop-stage {
   width: auto;
   height: auto;
   min-height: 0;
-  border: 1px solid var(--border);
+  border: var(--stroke) solid var(--abyss);
   border-radius: 13px;
-  background: #02060d;
+  background: #02090e;
 }
 body.immersive .screen-scroller { -webkit-overflow-scrolling: touch; }
 /* The floating buttons at the lower right: zoom, the keyboard and Controls. */
@@ -238,35 +307,34 @@ body.immersive .quick-dock {
   display: flex; align-items: center; gap: 8px;
 }
 .quick-toggle, .dock-button {
-  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 9px 16px 9px 12px;
-  border: 1px solid var(--border); border-radius: 99px;
-  background: #131a2aeb; color: var(--text);
-  box-shadow: 0 5px 20px #0009;
-  font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 16px 8px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
 }
 .dock-button { width: 44px; padding: 0; }
-.dock-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+/* Zoomed in, or typing: that button is switched on. */
+.dock-button[aria-pressed="true"] { background-color: var(--teal); color: var(--abyss); }
 /* While typing, the bar above the phone's keyboard has what is needed. */
 body.immersive.typing .quick-dock { display: none; }
 body.immersive .quick-panel:not(.hidden) {
   position: fixed; z-index: 34;
   right: calc(24px + env(safe-area-inset-right, 0px));
-  bottom: calc(75px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   /* 48px = the 24px right offset mirrored on the left, so narrow phones never clip it. */
   width: min(360px, calc(100vw - 48px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-  max-height: calc(100dvh - 100px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; gap: 11px; padding: 14px; overflow: auto; overscroll-behavior: contain;
-  border: 1px solid var(--border); border-radius: 18px;
-  background: var(--surface); color: var(--text);
-  box-shadow: 0 14px 50px #000c;
+  max-height: calc(100dvh - 108px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 10px; padding: 14px; overflow: auto; overscroll-behavior: contain;
+  border: var(--stroke-card) solid var(--abyss); border-radius: var(--radius-card);
+  background: var(--panel-face); color: var(--foam);
+  box-shadow: 0 var(--lip-card) 0 0 var(--abyss), 0 24px 60px rgba(0, 0, 0, .5);
 }
 /* Sheets sit above the Controls button, across the phone's width. */
 body.immersive .sheet {
   z-index: 40;
   right: calc(9px + env(safe-area-inset-right, 0px));
   left: calc(9px + env(safe-area-inset-left, 0px));
-  bottom: calc(75px + var(--keyboard-offset) + env(safe-area-inset-bottom, 0px));
-  width: auto; max-width: 580px; max-height: min(66dvh, 460px); margin: auto;
+  bottom: calc(84px + var(--keyboard-offset) + env(safe-area-inset-bottom, 0px));
+  width: auto; max-width: 580px; max-height: min(72dvh, 540px); margin: auto;
 }
 
 /* Phones: the typing bar spans the screen and sits on the phone's keyboard, and the picture
@@ -276,8 +344,8 @@ body.immersive .sheet.keyboard-sheet {
   right: 0; left: 0; bottom: var(--keyboard-offset);
   width: auto; max-width: none; margin: 0;
   max-height: calc(100dvh - var(--keyboard-offset) - var(--viewport-top) - 8px - env(safe-area-inset-top, 0px));
-  padding: 6px calc(8px + env(safe-area-inset-right, 0px)) calc(6px + max(0px, env(safe-area-inset-bottom, 0px) - var(--keyboard-offset))) calc(8px + env(safe-area-inset-left, 0px));
-  border-width: 1px 0 0; border-radius: 14px 14px 0 0;
+  padding: 8px calc(8px + env(safe-area-inset-right, 0px)) calc(6px + max(0px, env(safe-area-inset-bottom, 0px) - var(--keyboard-offset))) calc(8px + env(safe-area-inset-left, 0px));
+  border-width: var(--stroke-card) 0 0; border-radius: var(--radius-card) var(--radius-card) 0 0; box-shadow: none;
 }
 body.immersive.typing .desktop-stage {
   top: calc(6px + var(--viewport-top) + env(safe-area-inset-top, 0px));
@@ -291,7 +359,7 @@ body.immersive.typing .desktop-stage {
   .session-head { gap: 8px; }
   .session-actions { gap: 6px; }
   /* Icon-only buttons. The words stay in the page for screen readers. */
-  .toolbutton { min-width: 44px; padding: 9px 11px; }
+  .toolbutton { min-width: 44px; padding: 8px 10px; }
   .toolbutton span, .controlbar button span { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .desktop-stage { height: clamp(230px, 53dvh, 620px); }
   .toolbar { padding: 8px; gap: 8px; }
@@ -316,24 +384,38 @@ body.immersive.typing .desktop-stage {
     left: calc(11px + env(safe-area-inset-left, 0px));
   }
   body.immersive .quick-dock { right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(19px + env(safe-area-inset-bottom, 0px)); }
+  /* Sideways the screen is wide and short, so the panel is too: it covers the floating
+     buttons (its own X closes it), and each group is one row: Keyboard with the six tiles,
+     the four switches, the menus, then the last two buttons beside the gestures help. */
   body.immersive .quick-panel:not(.hidden) {
-    right: calc(20px + env(safe-area-inset-right, 0px));
-    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-    width: min(430px, 60vw);
-    max-height: calc(100dvh - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-    gap: 8px; padding: 10px;
+    z-index: 36;
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    width: min(720px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    max-height: calc(100dvh - 26px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: end; gap: 8px; padding: 10px;
   }
-  body.immersive .sheet { bottom: calc(70px + var(--keyboard-offset) + env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 82px - env(safe-area-inset-top, 0px)); }
+  body.immersive .quick-panel > * { grid-column: 1 / -1; }
+  body.immersive .quick-primary { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  body.immersive .quick-primary button.quick-wide { grid-column: auto; flex-direction: column; gap: 3px; min-height: 56px; font-size: 12px; }
+  body.immersive .quick-toggles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  body.immersive .quick-options label { flex-basis: 0; min-width: 96px; }
+  body.immersive .quick-bottom { grid-column: 1 / 7; }
+  body.immersive .quick-help { grid-column: 7 / -1; }
+  body.immersive .sheet { bottom: calc(78px + var(--keyboard-offset) + env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 92px - env(safe-area-inset-top, 0px)); }
   body.immersive .keyboard-sheet textarea { min-height: 48px; max-height: 85px; }
 }
 
-/* People who asked their device for less motion get none of the small press animations. */
+/* People who asked their device for less motion get none of the small press animations,
+   and buttons stay where they are when pressed. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+  :is(.button, .toolbutton, .controlbar button, .icon-button, .quick-panel button, .special-keys button, .quick-toggle, .dock-button):active:not(:disabled) { transform: none; }
 }
 
 /* On-screen gamepad, laid out like a controller over the picture. Only the controls take
-   touches; everywhere else the picture underneath still gets them, so the mouse keeps working. */
+   touches; everywhere else the picture underneath still gets them, so the mouse keeps working.
+   Its faces are see-through, because the game is behind them. */
 .touch-pad { position: fixed; z-index: 8; inset: 0; pointer-events: none; display: grid;
   grid-template-columns: auto 1fr auto; grid-template-rows: auto 1fr auto;
   grid-template-areas: "lsh . rsh" ". . ." "left mid right";
@@ -347,12 +429,12 @@ body.immersive.typing .desktop-stage {
 .pad-left { grid-area: left; }
 .pad-right { grid-area: right; }
 .pad-middle { grid-area: mid; align-self: end; justify-self: center; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 0 8px; }
-.touch-pad button { min-width: 48px; min-height: 44px; padding: 0 10px; border: 1px solid #e6edf759; border-radius: 12px; background: #131a2a8c; color: var(--text); font: inherit; font-weight: 600; touch-action: none; }
-.touch-pad button.held { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.touch-pad button { min-width: 48px; min-height: 44px; padding: 0 10px; border: var(--stroke) solid var(--abyss); border-radius: 12px; background: rgba(27, 91, 116, .62); color: var(--foam); font: inherit; font-weight: 800; touch-action: none; }
+.touch-pad button.held { background: var(--teal); color: var(--abyss); }
 .pad-shoulder button { min-width: 64px; min-height: 48px; }
 .pad-middle button { min-width: 52px; min-height: 40px; font-size: 13px; }
-.pad-stick { position: relative; flex: none; width: 112px; height: 112px; border: 2px solid #e6edf766; border-radius: 50%; background: #131a2a66; touch-action: none; }
-.pad-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: #38bdf8bf; pointer-events: none; transform: translate(calc(var(--x, 0) * 32px), calc(var(--y, 0) * 32px)); }
+.pad-stick { position: relative; flex: none; width: 112px; height: 112px; border: var(--stroke) solid var(--abyss); border-radius: 50%; background: rgba(18, 61, 82, .5); touch-action: none; }
+.pad-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border: var(--stroke) solid var(--abyss); border-radius: 50%; background: rgba(39, 185, 204, .85); pointer-events: none; transform: translate(calc(var(--x, 0) * 32px), calc(var(--y, 0) * 32px)); }
 .pad-cross { flex: none; display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); }
 .pad-cross button { min-width: 0; min-height: 0; padding: 0; }
 .pad-face button { border-radius: 50%; }
@@ -370,6 +452,3 @@ body.immersive.typing .desktop-stage {
   .pad-stick { width: 96px; height: 96px; }
   .pad-cross { grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(3, 42px); }
 }
-.special-keys { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }
-.special-keys button { min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); color: var(--text); font: inherit; }
-.special-keys button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--bg); }

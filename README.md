@@ -390,7 +390,7 @@ R3.3 issues fixed in 1.0, what 1.1 added and the known limits are in
 - The bitrate is a target for the encoder, not a hard cap. On the development PC (NVENC), a
   picture that was new noise in every frame could not be pushed below about 10 Mbps.
 - Windows does not let a normal program see or control the lock screen, UAC prompts or
-  elevated windows; the stream shows a message while they are up. After **Lock the PC** you
+  elevated windows; the stream shows a message while they are up. After **Lock** you
   cannot unlock from the device, and after sleep someone has to wake the PC by hand.
 - iPhone Safari cannot hide its own bars or system gestures (use the Home Screen app).
 - File transfer: 2 GB per file, one upload at a time, uploads cannot be resumed, and a delete

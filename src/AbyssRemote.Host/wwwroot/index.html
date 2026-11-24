@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover">
-  <meta name="theme-color" content="#131a2a">
+  <meta name="theme-color" content="#040c18">
   <meta name="apple-mobile-web-app-title" content="Abyss Remote">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -40,6 +40,9 @@
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4z"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
     <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6M11 8v6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 3v7M12 10h6"/></symbol>
   </svg>
   <header class="bar" id="siteHeader">
     <div class="brand"><img class="logo" src="/icon-192.png" alt="" width="36" height="36"><b>Abyss Remote</b></div>
@@ -98,7 +101,7 @@
             <h2 id="gamesTitle">Games</h2>
             <div class="button-row">
               <button id="bigPicture" class="button" type="button"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Big Picture</button>
-              <button id="bigPictureClose" class="button" type="button">Close Big Picture</button>
+              <button id="bigPictureClose" class="button" type="button" aria-label="Close Big Picture"><span>Close<span class="when-wide"> Big Picture</span></span></button>
             </div>
           </div>
           <label id="gameFilterLabel" class="search hidden">
@@ -130,8 +133,8 @@
           <label for="clipText" class="field-label">Clipboard</label>
           <textarea id="clipText" rows="2" maxlength="4096" placeholder="Text for the PC's clipboard, or fetched from it" autocapitalize="off" autocomplete="off" spellcheck="false"></textarea>
           <div class="button-row">
-            <button id="clipGet" class="button" type="button">Get PC clipboard</button>
-            <button id="clipSet" class="button" type="button">Copy to PC clipboard</button>
+            <button id="clipGet" class="button" type="button" title="Fetch the text that is on the PC's clipboard">Get from PC</button>
+            <button id="clipSet" class="button" type="button" title="Put this text on the PC's clipboard">Send to PC</button>
           </div>
           <p id="clipStatus" class="status-line" role="status"></p>
         </section>
@@ -220,9 +223,9 @@
           <button type="button" id="quickHome"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span></button>
           <button type="button" id="quickMonitors"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><span>Monitors</span></button>
           <button type="button" id="quickScreenshot"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Screenshot</span></button>
-          <button type="button" id="quickRight" title="Right-click at the pointer">Right click</button>
-          <button type="button" id="quickScrollUp">Scroll up</button>
-          <button type="button" id="quickScrollDown">Scroll down</button>
+          <button type="button" id="quickRight" title="Right-click at the pointer"><svg class="icon" aria-hidden="true"><use href="#i-mouse"/></svg><span>Right click</span></button>
+          <button type="button" id="quickScrollUp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg><span>Scroll up</span></button>
+          <button type="button" id="quickScrollDown"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg><span>Scroll down</span></button>
         </div>
         <!-- The same on/off switches as in the top bar, built by app.js from the same list. -->
         <div id="quickToggles" class="quick-toggles"></div>
@@ -237,7 +240,11 @@
           <button id="quickReconnect" type="button">Reconnect</button>
           <button id="quickExit" type="button">Exit screen mode</button>
         </div>
-        <p class="quick-help">Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag. Swipe with two fingers to scroll and pinch to zoom. Zoomed in, Trackpad keeps the pointer in view and Direct touch moves the picture with one finger.</p>
+        <!-- Folded away, so the whole panel fits on a phone without scrolling. -->
+        <details class="help quick-help">
+          <summary>Touch gestures</summary>
+          <p>Tap to left-click. Tap with two fingers or hold one finger still to right-click. Pause, then move to drag. Swipe with two fingers to scroll and pinch to zoom. Zoomed in, Trackpad keeps the pointer in view and Direct touch moves the picture with one finger.</p>
+        </details>
       </aside>
       <aside id="monitorSheet" class="sheet monitor-sheet hidden" aria-label="Monitors">
         <div class="sheet-head"><strong>Monitors</strong><button id="closeMonitors" class="icon-button" type="button" aria-label="Close monitors"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
@@ -271,11 +278,11 @@
            for longer text and the clipboard. -->
       <section id="keyboardSheet" class="sheet keyboard-sheet hidden" aria-label="Type on the PC">
         <div id="keyboardMorePanel" class="keyboard-more hidden">
-          <div class="special-keys" aria-label="More keys">
+          <div class="special-keys key-grid" aria-label="More keys">
             <button type="button" data-special-key="F1">F1</button><button type="button" data-special-key="F2">F2</button><button type="button" data-special-key="F3">F3</button><button type="button" data-special-key="F4">F4</button><button type="button" data-special-key="F5">F5</button><button type="button" data-special-key="F6">F6</button><button type="button" data-special-key="F7">F7</button><button type="button" data-special-key="F8">F8</button><button type="button" data-special-key="F9">F9</button><button type="button" data-special-key="F10">F10</button><button type="button" data-special-key="F11">F11</button><button type="button" data-special-key="F12">F12</button>
             <button type="button" data-special-key="Insert">Ins</button><button type="button" data-special-key="PrintScreen">PrtSc</button>
           </div>
-          <div class="special-keys" aria-label="Shortcuts">
+          <div class="special-keys shortcut-grid" aria-label="Shortcuts">
             <button type="button" data-combo="AltLeft+Tab">Alt+Tab</button><button type="button" data-combo="ControlLeft+ShiftLeft+Escape">Task Manager</button><button type="button" data-combo="MetaLeft+KeyD">Show desktop</button><button type="button" data-combo="AltLeft+F4">Close window</button><button type="button" data-combo="MetaLeft+ShiftLeft+KeyS">Snip</button><button type="button" data-combo="ShiftLeft+Tab">Steam overlay</button>
           </div>
           <p>For longer text, autocorrect or dictation: write it here, then press Send.</p>
@@ -294,7 +301,7 @@
         <div class="typing-line">
           <label id="typingBox" class="typing-box">
             <textarea id="liveKeys" rows="1" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="enter" aria-label="Type on the connected PC; every key goes to it at once"></textarea>
-            <span class="typing-hint" aria-hidden="true">Type here: it goes straight to your PC</span>
+            <span class="typing-hint" aria-hidden="true">Type here: it goes to your PC</span>
           </label>
           <button id="keyboardMore" class="button" type="button" aria-expanded="false" aria-controls="keyboardMorePanel">More</button>
           <button id="closeKeyboard" class="icon-button" type="button" aria-label="Close keyboard"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>

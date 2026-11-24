@@ -90,7 +90,10 @@ async function loadPcActions() {
     $('pcActions').replaceChildren(...actions.filter((action) => PC_ACTIONS[action.id]).map((action) => {
       const button = el('button', 'button');
       button.type = 'button';
-      button.append(icon(PC_ACTIONS[action.id].icon), action.label);
+      // A short name on the button. The PC's own wording is its tooltip and what a screen reader says.
+      button.append(icon(PC_ACTIONS[action.id].icon), PC_ACTIONS[action.id].action);
+      button.title = action.label;
+      button.setAttribute('aria-label', action.label);
       button.addEventListener('click', () => runPcAction(action.id));
       return button;
     }));

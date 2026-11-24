@@ -1,6 +1,6 @@
 // Monitor cards: one per monitor of the PC, each with a small live picture. The home screen
 // shows them to open a stream; the stream view shows the same cards to switch monitor.
-import { el } from './dom.js';
+import { el, icon } from './dom.js';
 import { api, fetchFile } from './api.js';
 
 const REFRESH_MS = 5000;
@@ -90,8 +90,9 @@ export function createMonitorPicker(list, options) {
       item.append(open);
 
       if (options.onGame && options.gameMode?.()) {
-        const game = el('button', 'button monitor-game', 'Game mode');
+        const game = el('button', 'button monitor-game');
         game.type = 'button';
+        game.append(icon('play'), el('span', '', 'Game mode'));
         game.setAttribute('aria-label', `Open ${monitorLabel(display)} in Game mode`);
         game.addEventListener('click', () => options.onGame(display));
         item.append(game);

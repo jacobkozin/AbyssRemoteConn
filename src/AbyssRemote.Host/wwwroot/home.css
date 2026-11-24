@@ -1,92 +1,131 @@
 /* Abyss Remote home screen. One column on phones, two from 900px: monitors and games on the
-   left, files, PC actions and this device on the right. Colors come from style.css.
-   Sections: layout, monitor cards, games, files and rows. */
+   left, files, PC actions and this device on the right. Colours, outlines and lips come from
+   style.css. Sections: layout, monitor cards, games, files and rows. */
 
 /* Layout */
-.home { display: grid; gap: 16px; max-width: 1320px; margin: 0 auto; }
-.home-main, .home-side { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.home { display: grid; gap: 14px; max-width: 1320px; margin: 0 auto; }
+.home-main, .home-side { display: grid; gap: 14px; align-content: start; min-width: 0; }
 @media (min-width: 900px) {
   .home { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); align-items: start; }
 }
-.panel { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
-.panel h2 { margin: 0; font-size: 17px; }
+/* Each section is a game panel. */
+.panel { min-width: 0; margin-bottom: var(--lip-card); padding: 16px; border: var(--stroke-card) solid var(--abyss); border-radius: var(--radius-panel); background: var(--panel-face); box-shadow: 0 var(--lip-card) 0 0 var(--abyss); }
+.panel h2 { margin: 0; font-size: 18px; font-weight: 900; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; }
 .panel > h2 { margin-bottom: 12px; }
-.quiet { margin: 0; font-size: 13px; color: var(--muted); }
-.quiet strong { color: var(--text); overflow-wrap: anywhere; }
-.status-line { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.quiet { margin: 0; font-size: 13px; color: var(--mist); }
+.quiet strong { color: var(--foam); overflow-wrap: anywhere; }
+.status-line { margin: 10px 0 0; font-size: 13px; font-weight: 700; color: var(--mist); }
 .status-line:empty { display: none; }
 /* Away from home (1.2), inside This device */
-.away-panel { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.away-panel h3 { margin: 0 0 6px; font-size: 15px; }
+.away-panel { margin-top: 14px; padding-top: 12px; border-top: var(--stroke) solid var(--abyss); }
+.away-panel h3 { margin: 0 0 6px; font-size: 15px; font-weight: 900; }
 .away-panel .button-row { margin-top: 10px; }
 .away-handoff { display: grid; gap: 8px; margin-top: 10px; }
 .away-handoff .button { justify-self: start; }
-.away-code { font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; white-space: nowrap; }
-.button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.away-code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 1px; white-space: nowrap; }
+/* A set of buttons shares one width. When they do not fit side by side they stack, and
+   still share one width. */
+.button-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
 .panel .button-row + .button-row, .panel .quiet + .button-row { margin-top: 10px; }
+.panel-head .button-row { flex: 1 1 320px; max-width: 420px; }
+@media (max-width: 480px) { .button-row .button { padding-inline: 10px; font-size: 14px; } }
 .field-label { display: block; margin: 16px 0 6px; }
 .panel textarea { display: block; width: 100%; margin-bottom: 10px; resize: vertical; }
-.badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 99px; background: #38bdf826; color: var(--accent); font-size: 12px; font-weight: 700; vertical-align: 1px; }
+.badge { display: inline-block; margin-left: 8px; padding: 0 9px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-pill); background: var(--aqua); color: var(--abyss); font-size: 11px; font-weight: 900; line-height: 18px; vertical-align: 1px; }
 
 /* Monitor cards. Each picture frame has its monitor's own shape (--ratio is set by
    monitors.js) and is as wide as the card unless that would make it taller than
-   --frame-height, so an upright monitor stays a reasonable size. */
-.monitor-list { --frame-height: 170px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-items: start; gap: 12px; margin: 0; padding: 0; list-style: none; }
+   --frame-height, so an upright monitor stays a reasonable size. The cards of a row are
+   one height. */
+.monitor-list { --frame-height: 170px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .monitor-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.monitor-open { display: flex; flex-direction: column; gap: 10px; width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); color: var(--text); text-align: left; transition: transform .12s ease-out, border-color .12s ease-out; }
-.monitor-open:active { transform: scale(.98); }
-.monitor-frame { position: relative; display: block; align-self: center; width: min(100%, calc(var(--frame-height) * var(--ratio, 1.778))); aspect-ratio: var(--ratio, 1.778); overflow: hidden; border-radius: 6px; background: #05080f; }
+.monitor-open {
+  --lip: var(--lip-button);
+  position: relative; flex: 1; display: flex; flex-direction: column; gap: 10px; width: 100%; margin-bottom: var(--lip); padding: 8px;
+  border: var(--stroke) solid var(--abyss); border-radius: var(--radius-button);
+  background: var(--card-face); color: var(--foam); text-align: left;
+  box-shadow: 0 var(--lip) 0 0 var(--abyss);
+  transition: transform .08s ease-out, box-shadow .08s ease-out, filter .12s ease-out;
+}
+.monitor-open:active { transform: translateY(2px); box-shadow: 0 calc(var(--lip) - 2px) 0 0 var(--abyss); }
+.monitor-frame { position: relative; display: block; align-self: center; width: min(100%, calc(var(--frame-height) * var(--ratio, 1.778))); aspect-ratio: var(--ratio, 1.778); overflow: hidden; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background: #02090e; }
 .monitor-picture { display: block; width: 100%; height: 100%; object-fit: cover; }
-.monitor-note { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; overflow: hidden; font-size: 12px; line-height: 1.35; text-align: center; color: var(--muted); }
-.monitor-text strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
-.monitor-text small { display: block; font-size: 13px; color: var(--muted); }
-.monitor-card[aria-current="true"] .monitor-open { border-color: var(--accent); }
-.monitor-game { width: 100%; font-size: 14px; }
+.monitor-note { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; overflow: hidden; font-size: 12px; line-height: 1.35; text-align: center; color: var(--mist); }
+.monitor-text strong { display: block; font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+.monitor-text small { display: block; font-size: 12px; color: var(--mist); }
+/* "Main" sits on the corner of the picture, so it never pushes the name onto another line. */
+.monitor-text .badge { position: absolute; top: 14px; left: 14px; margin: 0; }
+/* The monitor being shown is switched on, so its card is teal. */
+.monitor-card[aria-current="true"] .monitor-open { background: var(--teal); color: var(--abyss); }
+.monitor-card[aria-current="true"] .monitor-text small { color: var(--abyss); }
+.button.monitor-game { --lip: var(--lip-small); width: 100%; border-radius: var(--radius-small); font-size: 13px; }
+/* In the sheet over the stream the pictures are smaller, so three monitors fit without scrolling. */
+.monitor-sheet .monitor-list { --frame-height: 100px; }
 @media (min-width: 700px) {
   .monitor-list { --frame-height: 210px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+  .monitor-sheet .monitor-list { --frame-height: 130px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+}
+/* Phones: one monitor per row, a small picture beside its name, so three monitors take one
+   screen instead of three. Every picture gets the same room (--frame-room), so the names line
+   up whatever the monitor's shape. Game mode is a tile at the end of the row. */
+@media (max-width: 699px) {
+  .monitor-list, .monitor-sheet .monitor-list { --frame-height: 48px; --frame-room: 86px; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .monitor-card { flex-direction: row; align-items: stretch; }
+  .monitor-open { flex-direction: row; align-items: center; gap: 12px; min-width: 0; }
+  .monitor-frame { flex: none; width: min(var(--frame-room), calc(var(--frame-height) * var(--ratio, 1.778))); margin-inline: calc((var(--frame-room) - min(var(--frame-room), calc(var(--frame-height) * var(--ratio, 1.778)))) / 2); }
+  .monitor-note { padding: 2px; font-size: 11px; line-height: 1.2; }
+  .monitor-text { min-width: 0; }
+  /* "Main" is a tag on the top edge of its row, so every row keeps the same height. */
+  .monitor-text .badge { top: -10px; right: 12px; left: auto; }
+  .button.monitor-game { --lip: var(--lip-button); flex: none; flex-direction: column; gap: 2px; width: 64px; padding: 6px 4px; border-radius: var(--radius-button); font-size: 11px; line-height: 1.15; text-align: center; }
 }
 @media (hover: hover) and (pointer: fine) {
-  .monitor-open:hover { border-color: var(--accent); }
+  .monitor-open:hover { filter: brightness(1.1); }
 }
 
-/* Games: portrait covers in Steam's 2:3 shape, the name underneath. */
-.search { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--muted); }
-.search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
-.search input { flex: 1; padding-left: 0; border: 0; outline: none; background: none; }
-.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 14px 12px; margin: 12px 0 0; padding: 0; list-style: none; }
-.game-tile { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--text); text-align: left; }
-.game-cover { display: block; aspect-ratio: 2 / 3; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); transition: transform .12s ease-out, border-color .12s ease-out; }
-.game-tile:active .game-cover { transform: scale(.97); }
+/* Games: portrait covers in Steam's 2:3 shape, the name underneath. Three across on a phone. */
+.search { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; padding: 0 12px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background-color: var(--deep); color: var(--mist); box-shadow: inset 0 2px 0 rgba(0, 0, 0, .22); }
+.search:focus-within { outline: 3px solid var(--aqua); outline-offset: 1px; }
+.search input { flex: 1; padding-left: 0; border: 0; outline: none; background: none; box-shadow: none; }
+.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 12px 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.game-tile { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; border-radius: var(--radius-small); background: none; color: var(--foam); text-align: left; }
+.game-cover { display: block; aspect-ratio: 2 / 3; margin-bottom: var(--lip-small); overflow: hidden; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background: var(--card-face); box-shadow: 0 var(--lip-small) 0 0 var(--abyss); transition: transform .08s ease-out, box-shadow .08s ease-out, filter .12s ease-out; }
+.game-tile:active .game-cover { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--abyss); }
 .game-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.game-letters { display: grid; place-items: center; height: 100%; padding: 8px; overflow: hidden; font-size: 14px; font-weight: 700; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
-.game-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+.game-letters { display: grid; place-items: center; height: 100%; padding: 8px; overflow: hidden; font-size: 13px; font-weight: 800; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.game-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 12px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
 .show-all { width: 100%; margin-top: 14px; }
 @media (min-width: 700px) {
-  .game-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
+  .game-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 14px 12px; }
+  .game-name { font-size: 13px; }
 }
 @media (hover: hover) and (pointer: fine) {
-  .game-tile:hover .game-cover { border-color: var(--accent); }
+  .game-tile:hover .game-cover { filter: brightness(1.1); }
 }
 
 /* Files and other lists of rows */
-.drop-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border-radius: 12px; }
-.drop-hint { display: none; margin: 0; font-size: 13px; }
+.drop-zone { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; border-radius: var(--radius-small); }
+.drop-hint { display: none; margin: 0; font-size: 13px; line-height: 44px; }
 @media (hover: hover) and (pointer: fine) {
   /* Dropping needs a mouse, so only then is the area drawn as a place to drop things. */
-  .drop-zone { padding: 12px; border: 1px dashed var(--border); }
+  .drop-zone { padding: 12px; border: var(--stroke) dashed var(--abyss); background: rgba(11, 40, 56, .35); }
   .drop-hint { display: block; }
 }
-.dropping .drop-zone { border-color: var(--accent); background: #38bdf814; }
-.rows { margin: 10px 0 0; padding: 0; list-style: none; }
+.dropping .drop-zone { background: rgba(39, 185, 204, .24); }
+.rows { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
 .rows:empty { display: none; }
-.row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.row { display: flex; align-items: center; gap: 8px; margin-bottom: var(--lip-small); padding: 8px 8px 8px 12px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-small); background: var(--row-face); box-shadow: 0 var(--lip-small) 0 0 var(--abyss); }
 .row-text { flex: 1; min-width: 0; }
-.row-text strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
-.row-text small { display: block; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-.row.failed small { color: var(--danger); }
-.row progress { display: block; width: 100%; height: 6px; margin-top: 6px; border: 0; border-radius: 99px; overflow: hidden; appearance: none; -webkit-appearance: none; background: var(--border); }
-.row progress::-webkit-progress-bar { background: var(--border); }
-.row progress::-webkit-progress-value { background: var(--accent); }
-.row progress::-moz-progress-bar { background: var(--accent); }
+.row-text strong { display: block; font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+.row-text small { display: block; font-size: 12px; color: var(--mist); overflow-wrap: anywhere; }
+.row.failed small { color: var(--coral); font-weight: 700; }
+.row progress { display: block; width: 100%; height: 8px; margin-top: 6px; border: 0; border-radius: var(--radius-pill); overflow: hidden; appearance: none; -webkit-appearance: none; background: var(--abyss); }
+.row progress::-webkit-progress-bar { background: var(--abyss); }
+.row progress::-webkit-progress-value { background: var(--teal); }
+.row progress::-moz-progress-bar { background: var(--teal); }
 .folder-path { margin-top: 10px; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  .monitor-open:active, .game-tile:active .game-cover { transform: none; }
+}

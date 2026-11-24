@@ -10,6 +10,20 @@
   browser a separate away key. Pairing and the root certificate are refused at the away
   address. Revoking a device ends both keys, and turning the setting off forgets every away
   key. See [Security](docs/SECURITY.md#what-12-added).
+- **A new look for the browser client: the Abyss game style.** Ocean-coloured panels with one
+  dark outline and a lip under everything that can be pressed; teal for the main action and
+  for anything switched on, coral for what cannot be undone. Fixed along the way, on phones:
+  - The home screen lists one monitor per row and shows three game covers across, which
+    makes it about 30% shorter with the demo's three monitors and fourteen games.
+  - The Controls panel is Keyboard, six even tiles, four even switches, the menus and a
+    folded "Touch gestures". It fits the screen without scrolling, upright or sideways; it
+    used to be cut off, with wrapped switch names and one menu left over.
+  - The Monitors sheet over the stream shows three monitors without being cut off.
+  - Buttons that belong together are one width and their labels fit: "Lock" and "Sleep"
+    (the PC's own wording is the tooltip), "Get from PC", "Send to PC".
+  - The keys under "More" stand in even rows.
+  Checked in Chromium against the demo server at 375 and 812 px wide with touch and at
+  1280 px, not yet on a real phone. The Windows window keeps its look.
 - The window lists which devices have away access, and the away address sits under the port
   in Settings.
 - Requests that carry proxy headers (`X-Forwarded-For`, `Forwarded`) for any name other than
