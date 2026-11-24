@@ -23,7 +23,23 @@
     (the PC's own wording is the tooltip), "Get from PC", "Send to PC".
   - The keys under "More" stand in even rows.
   Checked in Chromium against the demo server at 375 and 812 px wide with touch and at
-  1280 px, not yet on a real phone. The Windows window keeps its look.
+  1280 px, not yet on a real phone.
+- **The Windows window has the same look.** Its cards are lit from above and stand on the
+  ocean page, each with one dark outline and a lip. Buttons sink into their lip when pressed.
+  Teal is the main button of a card and a ticked box, coral is "Revoke all" and the edge of
+  the "not running" card. Labels are aqua, text boxes are set into their card, and on
+  Windows 11 the title bar and the window's frame take the colours of the header. Along the
+  way:
+  - The Activity list has a scroll bar only while there is more than fits. It is scrolled
+    to its newest line in a way that also works while the window is not on screen; the old
+    way did nothing in a window that had not been shown yet.
+  - The window opens 100 pixels taller (1100 x 1040 at 100%), where the screen has the
+    room. The lips and the space under the header made the cards a little taller, and with
+    away access and two devices everything is still visible without scrolling.
+  Checked in off-screen pictures at 100% and 150%, including hovered and pressed buttons, a
+  long activity list and the single column of a narrow window, and by the layout tests at
+  100, 125, 150 and 200%. The rebuilt program was started on the development PC, where the
+  window opened with every card in place and no scroll bar.
 - The window lists which devices have away access, and the away address sits under the port
   in Settings.
 - Requests that carry proxy headers (`X-Forwarded-For`, `Forwarded`) for any name other than

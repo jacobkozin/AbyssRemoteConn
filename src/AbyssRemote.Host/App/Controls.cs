@@ -2,16 +2,43 @@ using System.Drawing.Drawing2D;
 
 namespace AbyssRemote.Host.App;
 
+/// <summary>Something that controls lie on: the page under the cards, a card under its
+/// buttons. A rounded control cannot be see-through, so before it draws itself it has what it
+/// lies on paint the part behind it. That is what then shows outside its round corners.</summary>
+internal interface IBackdrop
+{
+    /// <summary>Paints, into the drawing of <paramref name="child"/>, what lies behind
+    /// <paramref name="area"/> of it (in the child's own coordinates).</summary>
+    void PaintBehind(Graphics g, Control child, Rectangle area);
+}
+
+internal static class Backdrop
+{
+    /// <summary>Paints what is behind a part of <paramref name="control"/>: the backdrop it
+    /// lies on, or the plain page colour where it lies on something else.</summary>
+    public static void Paint(Graphics g, Control control, Rectangle area)
+    {
+        if (control.Parent is IBackdrop parent)
+        {
+            parent.PaintBehind(g, control, area);
+            return;
+        }
+        using var page = new SolidBrush(Palette.Background);
+        g.FillRectangle(page, area);
+    }
+}
+
 internal enum ButtonKind { Primary, Secondary, Danger }
 
-/// <summary>A rounded button in the window's colours. It is a real <see cref="Button"/>
-/// underneath, so the keyboard (Tab, Space, Enter) and screen readers work as usual; only the
-/// drawing is ours.</summary>
-internal sealed class FlatButton : Button
+/// <summary>A button in the game style: a face with one outline, standing on a lip. Pressing
+/// sinks the face into the lip. Lagoon is the ordinary button, teal the main one, coral what
+/// cannot be undone. It is a real <see cref="Button"/> underneath, so the keyboard (Tab,
+/// Space, Enter) and screen readers work as usual; only the drawing is ours.</summary>
+internal sealed class RaisedButton : Button
 {
     private bool _hover, _pressed;
 
-    public FlatButton(string text, ButtonKind kind = ButtonKind.Secondary)
+    public RaisedButton(string text, ButtonKind kind = ButtonKind.Secondary)
     {
         Text = text;
         Kind = kind;
@@ -20,9 +47,6 @@ internal sealed class FlatButton : Button
     }
 
     public ButtonKind Kind { get; set; }
-
-    /// <summary>The colour behind the button, visible outside its rounded corners.</summary>
-    public Color Backdrop { get; set; } = Palette.Surface;
 
     /// <summary>The scale of the monitor the button is on (1 = 100%); see <see cref="Ui"/>.</summary>
     public float UiScale { get; set; } = 1;
@@ -40,43 +64,37 @@ internal sealed class FlatButton : Button
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Backdrop);
+        Backdrop.Paint(g, this, ClientRectangle); // shows outside the round corners, and above a pressed face
         var bounds = ClientRectangle;
-        float radius = 8 * UiScale;
-        Color text;
+        float radius = 10 * UiScale;
+        int lip = Math.Max(2, (int)Math.Round(3 * UiScale)), outline = Math.Max(1, (int)Math.Round(2 * UiScale));
+        int sunk = _pressed && Enabled ? Math.Min(lip - 1, (int)Math.Round(2 * UiScale)) : 0;
+        Color face, text;
         if (!Enabled)
         {
-            Ui.FillRounded(g, bounds, radius, Palette.Raised, Palette.Border);
-            text = Palette.Tint(Palette.Muted, 60, Palette.Raised);
-        }
-        else if (Kind == ButtonKind.Primary)
-        {
-            // The blue-to-cyan gradient of the app icon; a little lighter under the mouse.
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var path = Ui.RoundedRectangle(new RectangleF(0, 0, bounds.Width, bounds.Height), radius);
-            Color from = _pressed ? Palette.AccentBlue : _hover ? Palette.Tint(Color.White, 12, Palette.AccentBlue) : Palette.AccentBlue;
-            Color to = _pressed ? Palette.AccentBlue : _hover ? Palette.Tint(Color.White, 12, Palette.Accent) : Palette.Accent;
-            using var brush = new LinearGradientBrush(new Rectangle(0, 0, Math.Max(1, bounds.Width), Math.Max(1, bounds.Height)), from, to, 0f);
-            g.FillPath(brush, path);
-            text = Palette.OnAccent;
+            face = Palette.Tint(Palette.Raised, 45);
+            text = Palette.Tint(Palette.Muted, 60, face);
         }
         else
         {
-            Color ink = Kind == ButtonKind.Danger ? Palette.Danger : Palette.Text;
-            Color fill = Kind == ButtonKind.Danger
-                ? Palette.Tint(Palette.Danger, _pressed ? 28 : _hover ? 20 : 10, Backdrop)
-                : _pressed ? Palette.Border : _hover ? Palette.RaisedHover : Palette.Raised;
-            Color outline = Kind == ButtonKind.Danger ? Palette.Tint(Palette.Danger, 45, Backdrop) : Palette.Border;
-            Ui.FillRounded(g, bounds, radius, fill, outline);
-            text = ink;
+            (face, text) = Kind switch
+            {
+                ButtonKind.Primary => (Palette.Teal, Palette.OnAccent),
+                ButtonKind.Danger => (Palette.Danger, Palette.OnAccent),
+                _ => (Palette.Raised, Palette.Text),
+            };
+            if (_hover && !_pressed) face = Palette.Tint(Color.White, 10, face); // a little lighter under the mouse
         }
-        TextRenderer.DrawText(g, Text, Font, bounds, text,
+        Ui.FillRaised(g, bounds, radius, face, outline, lip, sunk);
+        var label = new Rectangle(bounds.X, bounds.Y + sunk, bounds.Width, bounds.Height - lip);
+        TextRenderer.DrawText(g, Text, Font, label, text,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         if (Focused && ShowFocusCues)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var ring = new Pen(Kind == ButtonKind.Primary ? Palette.Text : Palette.Accent, Math.Max(1, UiScale));
-            using var path = Ui.RoundedRectangle(new RectangleF(1.5f, 1.5f, bounds.Width - 3, bounds.Height - 3), Math.Max(0, radius - 1));
+            using var ring = new Pen(Kind == ButtonKind.Secondary ? Palette.Accent : Palette.OnAccent, Math.Max(1, UiScale));
+            float gap = outline + 1.5f;
+            using var path = Ui.RoundedRectangle(new RectangleF(label.X + gap, label.Y + gap, label.Width - 2 * gap, label.Height - 2 * gap), Math.Max(0, radius - gap));
             g.DrawPath(ring, path);
         }
     }
@@ -97,8 +115,6 @@ internal sealed class CheckRow : CheckBox
         Cursor = Cursors.Hand;
     }
 
-    public Color Backdrop { get; set; } = Palette.Surface;
-
     private int BoxSize => (int)Math.Round(Font.Size * 1.35f);
     private int Gap => (int)Math.Round(Font.Size * 0.75f);
 
@@ -113,13 +129,13 @@ internal sealed class CheckRow : CheckBox
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Backdrop);
+        Backdrop.Paint(g, this, ClientRectangle);
         int lineHeight = Ui.MeasureLine("Ag", Font).Height;
         var box = new Rectangle(0, Math.Max(0, (lineHeight - BoxSize) / 2) + 1, BoxSize, BoxSize);
         float radius = BoxSize * 0.28f;
         if (Checked)
         {
-            Ui.FillRounded(g, box, radius, Enabled ? Palette.Accent : Palette.Muted);
+            Ui.FillRounded(g, box, radius, Enabled ? Palette.Teal : Palette.Muted, Palette.Border, Math.Max(1f, BoxSize / 9f));
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using var pen = new Pen(Palette.OnAccent, Math.Max(1.6f, BoxSize / 9f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
             g.DrawLines(pen,
@@ -131,7 +147,8 @@ internal sealed class CheckRow : CheckBox
         }
         else
         {
-            Ui.FillRounded(g, box, radius, _hover ? Palette.RaisedHover : Palette.Background, _hover ? Palette.Muted : Palette.Border);
+            // An empty box is a small button at rest. Darker, it would vanish at the dark bottom of a card.
+            Ui.FillRounded(g, box, radius, _hover ? Palette.RaisedHover : Palette.Raised, Palette.Border, Math.Max(1f, BoxSize / 9f));
         }
         var label = new Rectangle(BoxSize + Gap, 0, Width - BoxSize - Gap, Height);
         TextRenderer.DrawText(g, Text, Font, label, Enabled ? Palette.Text : Palette.Muted, Ui.Wrapped);
@@ -217,9 +234,10 @@ internal readonly struct Pass(Graphics? graphics, Ui ui)
     }
 }
 
-/// <summary>A rounded panel with a title: the building block of the window. A card draws its
-/// own text and hosts real controls for anything that can be clicked or typed into.</summary>
-internal abstract class Card : Control
+/// <summary>A panel with a title: the building block of the window. It is a face with one
+/// outline, standing on a lip, and the face is lit from above. A card draws its own text and
+/// hosts real controls for anything that can be clicked or typed into.</summary>
+internal abstract class Card : Control, IBackdrop
 {
     protected Card(string title, IWindowActions actions)
     {
@@ -232,8 +250,8 @@ internal abstract class Card : Control
     protected string Title { get; }
     protected IWindowActions Actions { get; }
 
-    /// <summary>The colour of the card's outline; a problem card uses red.</summary>
-    protected virtual Color Outline => Palette.Border;
+    /// <summary>The colour of the lip under the card; a problem card's is coral.</summary>
+    protected virtual Color Lip => Palette.Border;
     protected Ui Ui { get; private set; } = null!;
     protected int Pad => Ui.Px(18);
 
@@ -244,16 +262,17 @@ internal abstract class Card : Control
         Ui = ui;
         foreach (Control child in Controls)
         {
-            child.Font = child is FlatButton ? ui.Bold : ui.Body;
-            if (child is FlatButton button) button.UiScale = ui.Scale;
+            child.Font = child is RaisedButton ? ui.Bold : ui.Body;
+            if (child is RaisedButton button) button.UiScale = ui.Scale;
         }
         OnScaleChanged();
     }
 
     protected virtual void OnScaleChanged() { }
 
-    /// <summary>Lays the card out for <paramref name="width"/> and returns the height it needs.</summary>
-    public int Arrange(int width) => Compose(new Pass(null, Ui), width);
+    /// <summary>Lays the card out for <paramref name="width"/> and returns the height it needs:
+    /// its content, plus the lip under it.</summary>
+    public int Arrange(int width) => Compose(new Pass(null, Ui), width) + Ui.CardLip;
 
     /// <summary>Adds a button (or another control) to the card.</summary>
     protected T Add<T>(T control) where T : Control
@@ -272,10 +291,29 @@ internal abstract class Card : Control
         return Pad + height + Ui.Px(12);
     }
 
+    /// <summary>The card without the lip under it.</summary>
+    private Rectangle FaceArea => new(0, 0, Width, Height - Ui.CardLip);
+
+    /// <summary>For the buttons and boxes on the card: the part of its face behind them.</summary>
+    public void PaintBehind(Graphics g, Control child, Rectangle area)
+    {
+        // The face as the child sees it: the same picture, starting where the card starts for the child.
+        var face = FaceArea;
+        face.Offset(-child.Left, -child.Top);
+        using var brush = Ui.FaceBrush(face);
+        g.FillRectangle(brush, area);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
-        e.Graphics.Clear(Palette.Background);
-        Ui.FillRounded(e.Graphics, ClientRectangle, Ui.Px(12), Palette.Surface, Outline);
-        Compose(new Pass(e.Graphics, Ui), Width);
+        var g = e.Graphics;
+        // What is behind the card shows only at its corners: in the strip with the top
+        // corners, and in the strip with the bottom corners and the lip.
+        int corner = Ui.CardCorner, foot = corner + Ui.CardLip;
+        Backdrop.Paint(g, this, new Rectangle(0, 0, Width, corner));
+        Backdrop.Paint(g, this, new Rectangle(0, Height - foot, Width, foot));
+        using (var face = Ui.FaceBrush(FaceArea))
+            Ui.FillRaised(g, ClientRectangle, corner, face, Ui.CardOutline, Ui.CardLip, lipColor: Lip);
+        Compose(new Pass(g, Ui), Width);
     }
 }

@@ -4,8 +4,8 @@ namespace AbyssRemote.Host.App;
 /// is connected, and a way to take its access away.</summary>
 internal sealed class DevicesCard : Card
 {
-    private readonly FlatButton _revokeAll;
-    private readonly List<FlatButton> _revokeButtons = new();
+    private readonly RaisedButton _revokeAll;
+    private readonly List<RaisedButton> _revokeButtons = new();
     private IReadOnlyList<PairedDevice> _devices = [];
     private IReadOnlySet<string> _connected = new HashSet<string>();
     private string _shown = "";
@@ -13,7 +13,7 @@ internal sealed class DevicesCard : Card
 
     public DevicesCard(IWindowActions actions) : base("Devices", actions)
     {
-        _revokeAll = Add(new FlatButton("Revoke all", ButtonKind.Danger));
+        _revokeAll = Add(new RaisedButton("Revoke all", ButtonKind.Danger));
         _revokeAll.Click += (_, _) => Actions.RevokeAllDevices();
     }
 
@@ -26,7 +26,7 @@ internal sealed class DevicesCard : Card
         // One "Revoke" button per row; each remembers its device.
         while (_revokeButtons.Count < devices.Count)
         {
-            var button = Add(new FlatButton("Revoke") { Font = Ui.Bold, UiScale = Ui.Scale });
+            var button = Add(new RaisedButton("Revoke") { Font = Ui.Bold, UiScale = Ui.Scale });
             button.Click += (_, _) => { if (button.Tag is PairedDevice device) Actions.RevokeDevice(device); };
             _revokeButtons.Add(button);
         }
@@ -53,7 +53,7 @@ internal sealed class DevicesCard : Card
 
     protected override int Compose(Pass pass, int width)
     {
-        int revokeAllWidth = _revokeAll.WidthFor(Ui), buttonHeight = Ui.Px(30);
+        int revokeAllWidth = _revokeAll.WidthFor(Ui), buttonHeight = Ui.ButtonHeight(30);
         _revokeAll.Visible = _devices.Count > 0;
         int y = Header(pass, width, _revokeAll.Visible ? revokeAllWidth + Ui.Px(12) : 0);
         pass.Place(_revokeAll, width - Pad - revokeAllWidth, Pad - Ui.Px(4), revokeAllWidth, buttonHeight);
@@ -72,12 +72,12 @@ internal sealed class DevicesCard : Card
             {
                 if (i > 0)
                 {
-                    using var line = new Pen(Palette.Border);
+                    using var line = new Pen(Palette.Border, Ui.Outline);
                     g.DrawLine(line, Pad, y, width - Pad, y);
                 }
                 var circle = new Rectangle(Pad, y + (rowHeight - dot) / 2, dot, dot);
                 if (connected) Ui.FillCircle(g, circle, Palette.Success);
-                else Ui.FillRounded(g, circle, dot / 2f, Palette.Surface, Palette.Muted); // a hollow ring: paired, not connected
+                else Ui.DrawCircle(g, circle, Palette.Muted); // a ring: paired, not connected
             }
             int nameHeight = Ui.MeasureLine("Ag", Ui.Bold).Height, detailHeight = Ui.MeasureLine("Ag", Ui.Small).Height;
             int textY = y + (rowHeight - nameHeight - detailHeight - Ui.Px(2)) / 2;

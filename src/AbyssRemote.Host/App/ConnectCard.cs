@@ -30,7 +30,9 @@ internal sealed class HeaderBar : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Palette.Background);
+        // One solid band with a dark edge, like the header of the browser client.
+        g.Clear(Palette.Band);
+        using (var edge = new SolidBrush(Palette.Border)) g.FillRectangle(edge, 0, Height - _ui.Outline, Width, _ui.Outline);
         int pad = _ui.Px(20), iconSize = _ui.Px(36);
         if (_icon is not null)
         {
@@ -51,7 +53,7 @@ internal sealed class HeaderBar : Control
         Color color = _status.Phase switch
         {
             HostPhase.Running => Palette.Success,
-            HostPhase.Starting => Palette.Accent,
+            HostPhase.Starting => Palette.Warning,
             HostPhase.Failed => Palette.Danger,
             _ => Palette.Muted,
         };
@@ -62,7 +64,7 @@ internal sealed class HeaderBar : Control
         int textWidth = Math.Min(Ui.MeasureLine(_status.Summary, _ui.Bold).Width, room - 2 * inner - dot - gap);
         if (textWidth < _ui.Px(40)) return;
         var pill = new Rectangle(Width - pad - (2 * inner + dot + gap + textWidth), (Height - height) / 2, 2 * inner + dot + gap + textWidth, height);
-        Ui.FillRounded(g, pill, height / 2f, Palette.Tint(color, 12, Palette.Background), Palette.Tint(color, 38, Palette.Background));
+        Ui.FillRounded(g, pill, height / 2f, Palette.Surface, Palette.Border, _ui.Outline);
         Ui.FillCircle(g, new Rectangle(pill.X + inner, pill.Y + (height - dot) / 2, dot, dot), color);
         TextRenderer.DrawText(g, _status.Summary, _ui.Bold, new Rectangle(pill.X + inner + dot + gap, pill.Y, textWidth + 1, height), Palette.Text,
             Ui.OneLine | TextFormatFlags.VerticalCenter);
@@ -79,16 +81,16 @@ internal sealed class HeaderBar : Control
 /// do about it, and a button to try again.</summary>
 internal sealed class ProblemCard : Card
 {
-    private readonly FlatButton _retry;
+    private readonly RaisedButton _retry;
     private StartProblem? _problem;
 
     public ProblemCard(IWindowActions actions) : base("Abyss Remote is not running", actions)
     {
-        _retry = Add(new FlatButton("Try again", ButtonKind.Primary));
+        _retry = Add(new RaisedButton("Try again", ButtonKind.Primary));
         _retry.Click += (_, _) => Actions.TryAgain();
     }
 
-    protected override Color Outline => Palette.Tint(Palette.Danger, 55);
+    protected override Color Lip => Palette.Danger;
 
     public void Show(StartProblem? problem)
     {
@@ -108,7 +110,7 @@ internal sealed class ProblemCard : Card
 
     protected override int Compose(Pass pass, int width)
     {
-        int buttonWidth = _retry.WidthFor(Ui), buttonHeight = Ui.Px(34);
+        int buttonWidth = _retry.WidthFor(Ui), buttonHeight = Ui.ButtonHeight(34);
         int textWidth = width - 2 * Pad - buttonWidth - Ui.Px(16);
         int y = Header(pass, width, buttonWidth + Ui.Px(16));
         y += pass.Text(_problem?.Message ?? "", Ui.Body, Palette.Text, Pad, y, textWidth);
@@ -123,7 +125,7 @@ internal sealed class ProblemCard : Card
 /// and in home-network mode a QR code that holds both.</summary>
 internal sealed class ConnectCard : Card
 {
-    private readonly FlatButton _copy, _newCode;
+    private readonly RaisedButton _copy, _newCode;
     private readonly System.Windows.Forms.Timer _copiedTimer = new() { Interval = 1500 };
     private HostStatus? _status;
     private PairingCode _code = PairingCode.None;
@@ -133,8 +135,8 @@ internal sealed class ConnectCard : Card
 
     public ConnectCard(IWindowActions actions) : base("Connect", actions)
     {
-        _copy = Add(new FlatButton("Copy address"));
-        _newCode = Add(new FlatButton("New code", ButtonKind.Primary));
+        _copy = Add(new RaisedButton("Copy address"));
+        _newCode = Add(new RaisedButton("New code", ButtonKind.Primary));
         _newCode.Click += (_, _) => Actions.NewPairingCode();
         _copy.Click += (_, _) =>
         {
@@ -201,16 +203,16 @@ internal sealed class ConnectCard : Card
             y += pass.Line($"or {other}", Ui.Small, Palette.Muted, Pad, y, column);
         if (running.Lan) y += pass.Line($"On this PC: {running.LocalUrl}", Ui.Small, Palette.Muted, Pad, y, column);
         y += Ui.Px(10);
-        pass.Place(_copy, Pad, y, _copy.WidthFor(Ui), Ui.Px(32));
-        y += Ui.Px(32) + Ui.Px(14);
+        pass.Place(_copy, Pad, y, _copy.WidthFor(Ui), Ui.ButtonHeight(32));
+        y += Ui.ButtonHeight(32) + Ui.Px(14);
 
-        y += pass.Line("Pairing code", Ui.Small, Palette.Muted, Pad, y, column);
+        y += pass.Line("Pairing code", Ui.Bold, Palette.Accent, Pad, y, column);
         bool usable = _code.IsUsable(_now);
         // An unusable code is not shown at all; the dashes keep the layout from jumping.
-        y += pass.Line(usable ? _code.Grouped : "–––– ––––", Ui.Code, usable ? Palette.Text : Palette.Border, Pad, y, column);
+        y += pass.Line(usable ? _code.Grouped : "–––– ––––", Ui.Code, usable ? Palette.Text : Palette.Tint(Palette.Muted, 45), Pad, y, column);
         y += pass.Text(CodeStatus(_code, _now), Ui.Small, usable ? Palette.Muted : Palette.Text, Pad, y, column) + Ui.Px(12);
-        pass.Place(_newCode, Pad, y, _newCode.WidthFor(Ui), Ui.Px(34));
-        y += Ui.Px(34);
+        pass.Place(_newCode, Pad, y, _newCode.WidthFor(Ui), Ui.ButtonHeight(34));
+        y += Ui.ButtonHeight(34);
 
         if (running.Lan)
         {
@@ -237,10 +239,10 @@ internal sealed class ConnectCard : Card
             if (_qr is null || _qrKey != (url, pixels))
             {
                 _qr?.Dispose();
-                _qr = QrRenderer.ToBitmap(code, pixels, Palette.Background, Color.White);
+                _qr = QrRenderer.ToBitmap(code, pixels, Palette.Border, Color.White);
                 _qrKey = (url, pixels);
             }
-            Ui.FillRounded(g, new Rectangle(x, y, side, side), Ui.Px(10), Color.White);
+            Ui.FillRounded(g, new Rectangle(x, y, side, side), Ui.Corner, Color.White, Palette.Border, Ui.Outline);
             // The picture is a whole number of pixels per module, so it is centred, not stretched.
             g.DrawImageUnscaled(_qr, x + (side - _qr.Width) / 2, y + (side - _qr.Height) / 2);
         }

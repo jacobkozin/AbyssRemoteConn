@@ -9,16 +9,16 @@ internal sealed class PhoneSetupCard : Card
 {
     private enum Mark { Done, ToDo, Problem, Info }
 
-    private readonly FlatButton _checkAgain, _addRule, _openSettings, _saveCertificate;
+    private readonly RaisedButton _checkAgain, _addRule, _openSettings, _saveCertificate;
     private PhoneSetup _setup = PhoneSetup.NotChecked;
     private HostStatus? _status;
 
     public PhoneSetupCard(IWindowActions actions) : base("Phone setup", actions)
     {
-        _checkAgain = Add(new FlatButton("Check again"));
-        _addRule = Add(new FlatButton("Add firewall rule…"));
-        _openSettings = Add(new FlatButton("Open network settings"));
-        _saveCertificate = Add(new FlatButton("Save certificate file…"));
+        _checkAgain = Add(new RaisedButton("Check again"));
+        _addRule = Add(new RaisedButton("Add firewall rule…"));
+        _openSettings = Add(new RaisedButton("Open network settings"));
+        _saveCertificate = Add(new RaisedButton("Save certificate file…"));
         _checkAgain.Click += (_, _) => Actions.CheckSetupAgain();
         _addRule.Click += (_, _) => Actions.AddFirewallRule();
         _openSettings.Click += (_, _) => Actions.OpenNetworkSettings();
@@ -34,7 +34,7 @@ internal sealed class PhoneSetupCard : Card
 
     protected override int Compose(Pass pass, int width)
     {
-        int checkWidth = _checkAgain.WidthFor(Ui), buttonHeight = Ui.Px(30);
+        int checkWidth = _checkAgain.WidthFor(Ui), buttonHeight = Ui.ButtonHeight(30);
         int y = Header(pass, width, checkWidth + Ui.Px(12));
         pass.Place(_checkAgain, width - Pad - checkWidth, Pad - Ui.Px(4), checkWidth, buttonHeight);
         int port = _status?.Running?.Port ?? _status?.Options.Port ?? LaunchOptions.DefaultPort;
@@ -87,7 +87,7 @@ internal sealed class PhoneSetupCard : Card
     private int TextX => Pad + Ui.Px(20) + Ui.Px(12);
 
     /// <summary>One checklist row: a mark, a title, an explanation and an optional button.</summary>
-    private int Row(Pass pass, int width, int y, Mark mark, string title, string detail, FlatButton? button)
+    private int Row(Pass pass, int width, int y, Mark mark, string title, string detail, RaisedButton? button)
     {
         int textWidth = width - Pad - TextX;
         if (pass.Graphics is { } g) DrawMark(g, mark, Pad, y);
@@ -96,8 +96,8 @@ internal sealed class PhoneSetupCard : Card
         if (button is not null)
         {
             y += Ui.Px(8);
-            pass.Place(button, TextX, y, button.WidthFor(Ui), Ui.Px(30));
-            y += Ui.Px(30);
+            pass.Place(button, TextX, y, button.WidthFor(Ui), Ui.ButtonHeight(30));
+            y += Ui.ButtonHeight(30);
         }
         return y + Ui.Px(12);
     }
@@ -116,8 +116,8 @@ internal sealed class PhoneSetupCard : Card
         foreach (string line in FingerprintLines(running.RootFingerprint, textWidth))
             y += pass.Line(line, Ui.Mono, Palette.Text, TextX, y, textWidth);
         y += Ui.Px(8);
-        pass.Place(_saveCertificate, TextX, y, _saveCertificate.WidthFor(Ui), Ui.Px(30));
-        y += Ui.Px(30) + Ui.Px(8);
+        pass.Place(_saveCertificate, TextX, y, _saveCertificate.WidthFor(Ui), Ui.ButtonHeight(30));
+        y += Ui.ButtonHeight(30) + Ui.Px(8);
 
         if (running.RootCertificateUrl is { } download)
         {
@@ -158,9 +158,10 @@ internal sealed class PhoneSetupCard : Card
         int size = Ui.Px(20);
         var circle = new Rectangle(x, y, size, size);
         Color color = mark switch { Mark.Done => Palette.Success, Mark.Problem => Palette.Danger, Mark.ToDo => Palette.Accent, _ => Palette.Muted };
-        Ui.FillRounded(g, circle, size / 2f, Palette.Tint(color, 16), Palette.Tint(color, 60));
+        // A status mark is its colour as the face, with the sign drawn in the dark outline colour.
+        Ui.FillRounded(g, circle, size / 2f, color, Palette.Border, Math.Max(1f, size / 10f));
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(color, Math.Max(1.5f, size / 10f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var pen = new Pen(Palette.OnAccent, Math.Max(1.5f, size / 10f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
         float s = size;
         switch (mark)
         {

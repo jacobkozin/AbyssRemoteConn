@@ -56,6 +56,11 @@ The first three sit on `HostRuntime`.
   (`preferences.json`), "Start with Windows" (`Autostart`) and the single-instance check. The
   window is built in code; there are no designer files. The runtime's events arrive on other
   threads and are handed to the window's thread.
+- **`Ui`**, **`Palette`** and the controls in `Controls.cs` are the window's look: the Abyss
+  game style of the browser client, with the same colours. A card or a button is a face on a
+  lip (`Ui.FillRaised`), and a card's face is lit from above (`Ui.FaceBrush`). A round
+  control cannot be see-through in Windows Forms, so it first has what it lies on paint the
+  part behind it (`IBackdrop`: the page under the cards, a card under its buttons).
 - **`QrCode`** and **`QrRenderer`** are a hand-written QR encoder and its drawing code. The QR
   code holds the address and, while the pairing code is usable, the code in the address's
   fragment (`#pair=`).

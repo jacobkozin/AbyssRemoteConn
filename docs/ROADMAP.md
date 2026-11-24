@@ -130,6 +130,9 @@ item also stays open when its real effect on the PC has never been run.
 
 - [x] Devices added at home can use a public away address through a reverse proxy on the same PC: a setting with the address, one-time away codes from This device, a separate away key per device, and no pairing or root certificate there. *443 tests (2 skipped) and twelve browser check files; end to end in a phone-sized headless Chrome through a test Caddy with the Gaming Hub's proxy settings.* _(device)_ on mobile data.
 
+- [ ] The browser client in the Abyss game style, with the phone layouts that were wrong fixed along the way (Controls, Monitors, Games, button sets, the keys under "More"). *Chromium against the demo server at 375, 667 and 812 px wide with touch and at 1280 px. Not yet seen on a real phone.* _(device)_
+- [x] The Windows window in the same style. *Off-screen pictures at 100% and 150% were looked at, including hovered and pressed buttons, a long activity list and a narrow window; layout tests at 100, 125, 150 and 200%; tests check that round corners show what is behind them and that the activity list gets its scroll bar only when needed. The rebuilt program was then started on the development PC: its window opened on a 125% monitor with every card in place and no scroll bar (read through Windows' accessibility interface).*
+
 ## Next
 
 - Test on a real iPhone and iPad: certificate download and trust, scanning the QR code, touch

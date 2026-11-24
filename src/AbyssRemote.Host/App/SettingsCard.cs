@@ -7,7 +7,7 @@ internal sealed class SettingsCard : Card
 {
     private readonly CheckRow _lan, _away, _autostart, _tray;
     private readonly TextBox _port, _awayHost;
-    private readonly FlatButton _apply, _awayApply;
+    private readonly RaisedButton _apply, _awayApply;
     private int _currentPort = LaunchOptions.DefaultPort;
     private string _savedAwayHost = "";
     private bool _starting;
@@ -17,17 +17,17 @@ internal sealed class SettingsCard : Card
         _lan = Add(new CheckRow("Allow devices on my home network"));
         _port = Add(new TextBox
         {
-            BorderStyle = BorderStyle.None, BackColor = Palette.Background, ForeColor = Palette.Text, MaxLength = 5,
+            BorderStyle = BorderStyle.None, BackColor = Palette.Surface, ForeColor = Palette.Text, MaxLength = 5,
             Text = LaunchOptions.DefaultPort.ToString(), AccessibleName = "Port",
         });
-        _apply = Add(new FlatButton("Apply") { Enabled = false });
+        _apply = Add(new RaisedButton("Apply") { Enabled = false });
         _away = Add(new CheckRow("Let added devices connect away from home"));
         _awayHost = Add(new TextBox
         {
-            BorderStyle = BorderStyle.None, BackColor = Palette.Background, ForeColor = Palette.Text, MaxLength = 253,
+            BorderStyle = BorderStyle.None, BackColor = Palette.Surface, ForeColor = Palette.Text, MaxLength = 253,
             AccessibleName = "Away address", PlaceholderText = "remote.example.duckdns.org",
         });
-        _awayApply = Add(new FlatButton("Apply") { Enabled = false, AccessibleName = "Apply the away address" });
+        _awayApply = Add(new RaisedButton("Apply") { Enabled = false, AccessibleName = "Apply the away address" });
         _autostart = Add(new CheckRow("Start with Windows"));
         _tray = Add(new CheckRow("Keep running in the tray when I close the window"));
 
@@ -111,15 +111,16 @@ internal sealed class SettingsCard : Card
             Ui.Small, Palette.Muted, Pad + indent, y, inner - indent) + Ui.Px(12);
 
         // The port: a label, a small text field and a button on one line.
-        int fieldHeight = Ui.Px(32), fieldWidth = Ui.Px(84), labelWidth = Ui.MeasureLine("Port", Ui.Body).Width;
-        int labelHeight = Ui.MeasureLine("Ag", Ui.Body).Height;
-        pass.Line("Port", Ui.Body, Palette.Text, Pad, y + (fieldHeight - labelHeight) / 2, labelWidth + 1);
+        int fieldHeight = Ui.Px(32), fieldWidth = Ui.Px(84), labelWidth = Ui.MeasureLine("Port", Ui.Bold).Width;
+        int labelHeight = Ui.MeasureLine("Ag", Ui.Bold).Height;
+        pass.Line("Port", Ui.Bold, Palette.Accent, Pad, y + (fieldHeight - labelHeight) / 2, labelWidth + 1);
         var field = new Rectangle(Pad + labelWidth + Ui.Px(12), y, fieldWidth, fieldHeight);
         if (pass.Graphics is { } g)
-            Ui.FillRounded(g, field, Ui.Px(8), Palette.Background, _port.Focused ? Palette.Accent : TypedPort is null ? Palette.Danger : Palette.Border);
+            Ui.FillField(g, field, _port.Focused ? Palette.Accent : TypedPort is null ? Palette.Danger : Palette.Border);
         pass.Place(_port, field.X + Ui.Px(10), field.Y + (fieldHeight - _port.PreferredHeight) / 2, fieldWidth - Ui.Px(20), _port.PreferredHeight);
-        pass.Place(_apply, field.Right + Ui.Px(8), y, _apply.WidthFor(Ui), fieldHeight);
-        y += fieldHeight + Ui.Px(6);
+        // The button's face is as tall as the field; its lip hangs below.
+        pass.Place(_apply, field.Right + Ui.Px(8), y, _apply.WidthFor(Ui), fieldHeight + Ui.ButtonLip);
+        y += fieldHeight + Ui.ButtonLip + Ui.Px(6);
         y += TypedPort is null
             ? pass.Text("Use a number from 1024 to 65535.", Ui.Small, Palette.Danger, Pad, y, inner)
             : pass.Text("Changing the port restarts the server. The firewall rule is per port.", Ui.Small, Palette.Muted, Pad, y, inner);
@@ -132,18 +133,17 @@ internal sealed class SettingsCard : Card
         string address = TypedAwayHost ?? (_savedAwayHost.Length > 0 ? _savedAwayHost : "the away address");
         y += pass.Text($"Through the Gaming Hub at https://{address}. Each device is set up once at home; new ones can only be added at home.",
             Ui.Small, Palette.Muted, Pad + indent, y, inner - indent) + Ui.Px(12);
-        int awayLabelWidth = Ui.MeasureLine("Away address", Ui.Body).Width, awayApplyWidth = _awayApply.WidthFor(Ui);
+        int awayLabelWidth = Ui.MeasureLine("Away address", Ui.Bold).Width, awayApplyWidth = _awayApply.WidthFor(Ui);
         int awayFieldWidth = Math.Max(Ui.Px(120), inner - awayLabelWidth - Ui.Px(12) - awayApplyWidth - Ui.Px(8));
-        pass.Line("Away address", Ui.Body, Palette.Text, Pad, y + (fieldHeight - labelHeight) / 2, awayLabelWidth + 1);
+        pass.Line("Away address", Ui.Bold, Palette.Accent, Pad, y + (fieldHeight - labelHeight) / 2, awayLabelWidth + 1);
         var awayField = new Rectangle(Pad + awayLabelWidth + Ui.Px(12), y, awayFieldWidth, fieldHeight);
         bool awayTyped = _awayHost.Text.Trim().Length > 0;
         if (pass.Graphics is { } awayGraphics)
-            Ui.FillRounded(awayGraphics, awayField, Ui.Px(8), Palette.Background,
-                _awayHost.Focused ? Palette.Accent : awayTyped && TypedAwayHost is null ? Palette.Danger : Palette.Border);
+            Ui.FillField(awayGraphics, awayField, _awayHost.Focused ? Palette.Accent : awayTyped && TypedAwayHost is null ? Palette.Danger : Palette.Border);
         pass.Place(_awayHost, awayField.X + Ui.Px(10), awayField.Y + (fieldHeight - _awayHost.PreferredHeight) / 2,
             awayFieldWidth - Ui.Px(20), _awayHost.PreferredHeight);
-        pass.Place(_awayApply, awayField.Right + Ui.Px(8), y, awayApplyWidth, fieldHeight);
-        y += fieldHeight + Ui.Px(12);
+        pass.Place(_awayApply, awayField.Right + Ui.Px(8), y, awayApplyWidth, fieldHeight + Ui.ButtonLip);
+        y += fieldHeight + Ui.ButtonLip + Ui.Px(12);
         if (awayTyped && TypedAwayHost is null)
             y += pass.Text("Use a name like remote.example.duckdns.org, without https:// or a port.", Ui.Small, Palette.Danger, Pad, y, inner) + Ui.Px(12);
 
@@ -163,16 +163,21 @@ internal sealed class ActivityCard : Card
     private readonly TextBox _log;
     private NoticeLine? _last;
     private int _count = -1;
+    private Rectangle _room; // where the list goes in its well while it has no scroll bar
 
     public ActivityCard(IWindowActions actions) : base("Activity", actions)
     {
         // A read-only text box gives scrolling, selecting and copying for free.
         _log = Add(new TextBox
         {
-            Multiline = true, ReadOnly = true, BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.Vertical, TabStop = false,
+            Multiline = true, ReadOnly = true, BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.None, TabStop = false,
             BackColor = Palette.Surface, ForeColor = Palette.Muted, Text = Empty, AccessibleName = "Activity",
         });
-        _log.HandleCreated += (_, _) => WindowNative.UseDarkScrollBars(_log.Handle);
+        _log.HandleCreated += (_, _) =>
+        {
+            WindowNative.UseDarkScrollBars(_log.Handle);
+            ShowNewest(); // a new box starts at the top
+        };
     }
 
     /// <summary>The height the window gives this card beyond what it asks for; the list grows into it.</summary>
@@ -187,15 +192,43 @@ internal sealed class ActivityCard : Card
         (_count, _last) = (notices.Count, last);
         _log.ForeColor = notices.Count == 0 ? Palette.Muted : Palette.Text;
         _log.Text = notices.Count == 0 ? Empty : string.Join(Environment.NewLine, notices.Select(n => $"{n.Time.ToLocalTime():HH:mm:ss}   {n.Message}"));
-        // Keep the newest line in view.
-        _log.SelectionStart = _log.TextLength;
-        _log.ScrollToCaret();
+        ShowNewest();
+    }
+
+    /// <summary>Gives the list a scroll bar only while there is more than fits: one with
+    /// nothing to scroll is a dark strip for nothing. The window calls this when the card has
+    /// its final size.</summary>
+    public void FitScrollBar()
+    {
+        int needed = TextRenderer.MeasureText(_log.Text, _log.Font, new Size(Math.Max(1, _room.Width), int.MaxValue),
+            TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height;
+        // One line to spare, because the box may wrap a line a word earlier than this measurement.
+        int spare = Ui.MeasureLine("Ag", _log.Font).Height;
+        var bars = needed + spare > _room.Height ? ScrollBars.Vertical : ScrollBars.None;
+        if (_log.ScrollBars == bars) return;
+        _log.ScrollBars = bars; // Windows makes a new box for this
+        Arrange(Width);         // the box is wider with a scroll bar
+        ShowNewest();
+    }
+
+    /// <summary>Keeps the newest line in view. Before the box exists there is nothing to
+    /// scroll; it is scrolled when it is made.</summary>
+    private void ShowNewest()
+    {
+        if (_log.IsHandleCreated) WindowNative.ScrollToEnd(_log.Handle);
     }
 
     protected override int Compose(Pass pass, int width)
     {
-        int y = Header(pass, width), listHeight = Ui.Px(88) + ExtraHeight;
-        pass.Place(_log, Pad, y, width - 2 * Pad + Ui.Px(8), listHeight);
-        return y + listHeight + Pad - Ui.Px(4);
+        // The list lies in a well, like the text of a text box.
+        int y = Header(pass, width), wellHeight = Ui.Px(104) + ExtraHeight, side = Ui.Px(10), above = Ui.Px(8);
+        var well = new Rectangle(Pad, y, width - 2 * Pad, wellHeight);
+        var room = new Rectangle(well.X + side, well.Y + above, well.Width - 2 * side, well.Height - 2 * above);
+        if (pass.Graphics is { } g) Ui.FillField(g, well, Palette.Border);
+        else _room = room;
+        // A scroll bar stands at the right edge of the well, in the room the text otherwise keeps free.
+        int barRoom = _log.ScrollBars == ScrollBars.Vertical ? side - Ui.Outline - Ui.Px(2) : 0;
+        pass.Place(_log, room.X, room.Y, room.Width + barRoom, room.Height);
+        return y + wellHeight + Pad;
     }
 }

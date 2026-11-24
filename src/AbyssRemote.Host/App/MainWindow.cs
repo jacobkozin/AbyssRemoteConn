@@ -1,3 +1,5 @@
+using System.Drawing.Drawing2D;
+
 namespace AbyssRemote.Host.App;
 
 /// <summary>Everything inside the window: the header and, below it, a scrolling area with the
@@ -6,7 +8,7 @@ namespace AbyssRemote.Host.App;
 internal sealed class MainView : Control
 {
     private readonly HeaderBar _header = new();
-    private readonly Panel _scroll = new() { AutoScroll = true, BackColor = Palette.Background };
+    private readonly PagePanel _scroll = new();
     private readonly ProblemCard _problem;
     private readonly ConnectCard _connect;
     private readonly DevicesCard _devices;
@@ -93,6 +95,8 @@ internal sealed class MainView : Control
             if (needed > _scroll.Height)
                 needed = ArrangeCards(_scroll.Width - SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi));
             _scroll.AutoScrollMinSize = new Size(0, needed);
+            _scroll.PageChanged();
+            _activity.FitScrollBar(); // now that the list has its final size
         }
         finally { _arranging = false; }
     }
@@ -102,11 +106,17 @@ internal sealed class MainView : Control
         int margin = _ui.Px(20), gap = _ui.Px(14);
         int width = available - 2 * margin;
         var offset = _scroll.AutoScrollPosition; // negative while scrolled down
-        int top = _ui.Px(4);
+        int top = _ui.Px(16); // room under the header strip
         _activity.ExtraHeight = 0;
 
-        void Put(Card card, int x, int y, int cardWidth, int height) =>
-            card.SetBounds(margin + x + offset.X, y + offset.Y, cardWidth, height);
+        // A card that moves has another part of the page behind its corners, so it is drawn again.
+        void Put(Card card, int x, int y, int cardWidth, int height)
+        {
+            var bounds = new Rectangle(margin + x + offset.X, y + offset.Y, cardWidth, height);
+            if (card.Bounds == bounds) return;
+            card.Bounds = bounds;
+            card.Invalidate();
+        }
 
         if (_problem.Visible)
         {
@@ -156,11 +166,71 @@ internal sealed class MainView : Control
     }
 }
 
+/// <summary>The scrolling page under the cards: dark water with a little light coming in from
+/// above, like the pages of the browser client. The picture belongs to the content, not to
+/// the window: it scrolls along with the cards, so scrolling needs nothing drawn again.</summary>
+internal sealed class PagePanel : Panel, IBackdrop
+{
+    private Size _shown;
+
+    public PagePanel()
+    {
+        AutoScroll = true;
+        BackColor = Palette.Background;
+        DoubleBuffered = true;
+        ResizeRedraw = true;
+    }
+
+    /// <summary>To call after the cards were laid out. A page of another size is another
+    /// picture, also behind the corners of the cards that stayed where they were.</summary>
+    public void PageChanged()
+    {
+        if (DisplayRectangle.Size == _shown) return;
+        _shown = DisplayRectangle.Size;
+        Invalidate(true);
+    }
+
+    public void PaintBehind(Graphics g, Control child, Rectangle area)
+    {
+        // The page as the child sees it: starting where the page starts for the child.
+        var page = DisplayRectangle;
+        page.Offset(-child.Left, -child.Top);
+        PaintPage(g, page, area);
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e) => PaintPage(e.Graphics, DisplayRectangle, e.ClipRectangle);
+
+    private static void PaintPage(Graphics g, Rectangle page, Rectangle area)
+    {
+        if (page.Width <= 0 || page.Height <= 0 || area.Width <= 0 || area.Height <= 0) return;
+        using (var water = Ui.TopToBottom(page, [Palette.PageTop, Palette.PageMiddle, Palette.Background], [0f, 0.4f, 1f]))
+            g.FillRectangle(water, area);
+
+        // The light: teal, strongest just above the top edge of the page and gone about a
+        // quarter of the page's width further down. Its size follows the width only, so a
+        // longer page has the same light.
+        float rx = page.Width * 0.56f, ry = page.Width * 0.28f, cx = page.X + page.Width / 2f, cy = page.Y - ry * 0.2f;
+        var reach = new RectangleF(cx - rx, cy - ry, 2 * rx, 2 * ry);
+        if (!reach.IntersectsWith(area)) return;
+        using var shape = new GraphicsPath();
+        shape.AddEllipse(reach);
+        using var light = new PathGradientBrush(shape)
+        {
+            CenterPoint = new PointF(cx, cy),
+            CenterColor = Color.FromArgb(51, Palette.Teal),
+            SurroundColors = [Color.FromArgb(0, Palette.Teal)],
+        };
+        g.FillRectangle(light, area);
+    }
+}
+
 /// <summary>The Abyss Remote window: a dark title bar around a <see cref="MainView"/>. Closing
 /// it normally hides it to the tray; the app decides when it really closes.</summary>
 internal sealed class MainWindow : Form
 {
-    private static readonly Size StartSize = new(1100, 940), SmallestSize = new(600, 480); // logical pixels
+    // Logical pixels. The start size shows every card without scrolling in home-network mode
+    // with away access and two devices, where the screen has the room.
+    private static readonly Size StartSize = new(1100, 1040), SmallestSize = new(600, 480);
     private bool _placed, _closeButtonUsed;
 
     public MainWindow(IWindowActions actions)
@@ -200,6 +270,7 @@ internal sealed class MainWindow : Form
     {
         base.OnHandleCreated(e);
         WindowNative.UseDarkTitleBar(Handle);
+        WindowNative.UseFrameColors(Handle, Palette.Band, Palette.Border);
         ApplyMonitorScale();
     }
 
@@ -292,12 +363,13 @@ internal sealed class ConfirmDialog : Form
     {
         base.OnHandleCreated(e);
         WindowNative.UseDarkTitleBar(Handle);
+        WindowNative.UseFrameColors(Handle, Palette.Band, Palette.Border);
     }
 }
 
 /// <summary>The content of a <see cref="ConfirmDialog"/>: a headline, a sentence or two, and
-/// two buttons. It sizes itself to its text.</summary>
-internal sealed class ConfirmView : Control
+/// two buttons, on one face like a card's. It sizes itself to its text.</summary>
+internal sealed class ConfirmView : Control, IBackdrop
 {
     private readonly Ui _ui;
     private readonly string _title, _message;
@@ -306,25 +378,34 @@ internal sealed class ConfirmView : Control
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         (_title, _message, _ui) = (title, message, new Ui(scale));
-        Confirm = new FlatButton(confirm, danger ? ButtonKind.Danger : ButtonKind.Primary) { Backdrop = Palette.Background, Font = _ui.Bold, UiScale = scale };
-        Cancel = new FlatButton("Cancel") { Backdrop = Palette.Background, Font = _ui.Bold, UiScale = scale };
+        Confirm = new RaisedButton(confirm, danger ? ButtonKind.Danger : ButtonKind.Primary) { Font = _ui.Bold, UiScale = scale };
+        Cancel = new RaisedButton("Cancel") { Font = _ui.Bold, UiScale = scale };
         Controls.Add(Cancel);
         Controls.Add(Confirm);
 
-        int pad = _ui.Px(24), width = _ui.Px(440), textWidth = width - 2 * pad, buttonHeight = _ui.Px(34);
+        int pad = _ui.Px(24), width = _ui.Px(440), textWidth = width - 2 * pad, buttonHeight = _ui.ButtonHeight(34);
         int y = pad + Ui.MeasureWrapped(title, _ui.Heading, textWidth) + _ui.Px(10) + Ui.MeasureWrapped(message, _ui.Body, textWidth) + _ui.Px(22);
-        int confirmWidth = Math.Max(Confirm.WidthFor(_ui), _ui.Px(96)), cancelWidth = Math.Max(Cancel.WidthFor(_ui), _ui.Px(96));
-        Confirm.SetBounds(width - pad - confirmWidth, y, confirmWidth, buttonHeight);
-        Cancel.SetBounds(Confirm.Left - _ui.Px(10) - cancelWidth, y, cancelWidth, buttonHeight);
+        // The two answers are one width, like the buttons of any set.
+        int buttonWidth = Math.Max(Math.Max(Confirm.WidthFor(_ui), Cancel.WidthFor(_ui)), _ui.Px(96));
+        Confirm.SetBounds(width - pad - buttonWidth, y, buttonWidth, buttonHeight);
+        Cancel.SetBounds(Confirm.Left - _ui.Px(10) - buttonWidth, y, buttonWidth, buttonHeight);
         Size = new Size(width, y + buttonHeight + pad);
     }
 
-    public FlatButton Confirm { get; }
-    public FlatButton Cancel { get; }
+    public RaisedButton Confirm { get; }
+    public RaisedButton Cancel { get; }
+
+    public void PaintBehind(Graphics g, Control child, Rectangle area)
+    {
+        var face = ClientRectangle;
+        face.Offset(-child.Left, -child.Top);
+        using var brush = Ui.FaceBrush(face);
+        g.FillRectangle(brush, area);
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        e.Graphics.Clear(Palette.Background);
+        using (var face = Ui.FaceBrush(ClientRectangle)) e.Graphics.FillRectangle(face, ClientRectangle);
         int pad = _ui.Px(24), textWidth = Width - 2 * pad;
         var pass = new Pass(e.Graphics, _ui);
         int y = pad + pass.Text(_title, _ui.Heading, Palette.Text, pad, pad, textWidth) + _ui.Px(10);

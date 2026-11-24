@@ -101,6 +101,74 @@ public sealed class WindowLayoutTests
         finally { Directory.Delete(folder, recursive: true); }
     }
 
+    /// <summary>A round control cannot be see-through, so it paints what it lies on behind its
+    /// corners. Without that, a card would stand in a box of one flat colour on the page, and
+    /// a button in a box on its card.</summary>
+    [TestMethod]
+    [DataRow(1f)]
+    [DataRow(1.5f)]
+    public void RoundCornersShowWhatIsBehindThem(float scale) => OnWindowThread(() =>
+    {
+        var (_, state, size) = UiSnapshot.Samples().First();
+        using var view = new MainView(new Ignore(), scale) { Size = new Size((int)(size.Width * scale), (int)(size.Height * scale)) };
+        view.Show(state);
+        view.CreateControl();
+        using var picture = new Bitmap(view.Width, view.Height);
+        view.DrawToBitmap(picture, new Rectangle(Point.Empty, view.Size));
+
+        var page = view.Controls.OfType<Panel>().Single();
+        int buttons = 0;
+        foreach (Control card in Cards(view))
+        {
+            // The card's own corner pixel, and the page two pixels to the left of the card.
+            int x = page.Left + card.Left, y = page.Top + card.Top;
+            AssertSameColour(picture.GetPixel(x - 2, y), picture.GetPixel(x, y), $"the page behind the corner of {card.GetType().Name}");
+            foreach (var button in card.Controls.OfType<RaisedButton>().Where(button => button.Visible))
+            {
+                int left = x + button.Left, top = y + button.Top;
+                AssertSameColour(picture.GetPixel(left - 2, top), picture.GetPixel(left, top), $"the card behind the corner of \"{button.Text}\"");
+                buttons++;
+            }
+        }
+        Assert.IsTrue(buttons >= 8, "the sample shows the buttons of every card");
+
+        // And the page is not one flat colour: lighter at the top than at the bottom.
+        Color high = picture.GetPixel(4, page.Top + 4), low = picture.GetPixel(4, view.Height - 4);
+        Assert.IsTrue(high.G > low.G + 10, $"the page is lit from above ({high} over {low})");
+    });
+
+    private static void AssertSameColour(Color expected, Color actual, string what)
+    {
+        int apart = Math.Max(Math.Abs(expected.R - actual.R), Math.Max(Math.Abs(expected.G - actual.G), Math.Abs(expected.B - actual.B)));
+        Assert.IsTrue(apart <= 3, $"{what}: {actual} instead of {expected}");
+    }
+
+    /// <summary>The activity list shows a scroll bar only while there is more than fits. The
+    /// boxes are real here, so changing the scroll bar has to replace one, and the newest line
+    /// must still be in view afterwards.</summary>
+    [TestMethod]
+    public void TheActivityListHasAScrollBarOnlyWhileItIsNeeded() => OnWindowThread(() =>
+    {
+        var (_, state, size) = UiSnapshot.Samples().First();
+        using var view = new MainView(new Ignore(), 1f) { Size = size };
+        view.Show(state);
+        view.CreateControl();
+        var list = Cards(view).OfType<ActivityCard>().Single().Controls.OfType<TextBox>().Single();
+        Assert.AreEqual(ScrollBars.None, list.ScrollBars, "four lines fit");
+
+        var many = Enumerable.Range(0, 80)
+            .Select(i => new NoticeLine(state.Now.AddMinutes(i - 80), $"Paired a new device: \"Phone {i}\" from 192.168.1.{i}."))
+            .ToArray();
+        view.Show(state with { Notices = many });
+        Assert.AreEqual(ScrollBars.Vertical, list.ScrollBars, "eighty lines do not fit");
+        Assert.IsTrue(SendMessageW(list.Handle, FirstVisibleLine, 0, 0) > 0, "scrolled down to the newest line");
+        Check(view, "a long activity list");
+
+        view.Show(state);
+        Assert.AreEqual(ScrollBars.None, list.ScrollBars, "four lines fit again");
+        Check(view, "a short activity list again");
+    });
+
     [TestMethod]
     public void TheCloseButtonHidesToTheTrayButACloseRequestFromOutsideCloses() => OnWindowThread(() =>
     {
@@ -219,6 +287,7 @@ public sealed class WindowLayoutTests
 
     private const uint SystemCommand = 0x0112, CloseMessage = 0x0010; // WM_SYSCOMMAND, WM_CLOSE
     private const nint CloseCommand = 0xF060;                         // SC_CLOSE
+    private const uint FirstVisibleLine = 0x00CE;                     // EM_GETFIRSTVISIBLELINE
 
     [DllImport("user32.dll")] private static extern nint SendMessageW(IntPtr window, uint message, nint wParam, nint lParam);
 
