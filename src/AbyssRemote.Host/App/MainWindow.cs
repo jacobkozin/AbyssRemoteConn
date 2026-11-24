@@ -55,7 +55,7 @@ internal sealed class MainView : Control
         _connect.Show(state.Status, state.Code, state.Now);
         _devices.Show(state.Devices, state.ConnectedDeviceIds, state.Now);
         _setup.Show(state.Setup, state.Status);
-        _settings.Show(state.Status, state.StartWithWindows, state.CloseToTray);
+        _settings.Show(state.Status, state.StartWithWindows, state.CloseToTray, state.AwayHost);
         _activity.Show(state.Notices);
         _problem.Visible = state.Status.Phase == HostPhase.Failed;
         Arrange(); // heights depend on the content (a wrapped sentence, one more device)

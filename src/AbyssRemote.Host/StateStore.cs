@@ -8,6 +8,10 @@ public sealed class DeviceRecord
     public required string Id { get; init; }
     public required string Name { get; set; }
     public required string TokenHash { get; init; }
+    /// <summary>The hash of this device's second key, for the away address (1.2). Null until the
+    /// device is set up for away access. A home key never works away, and an away key never
+    /// works at home.</summary>
+    public string? AwayTokenHash { get; set; }
     public DateTimeOffset CreatedUtc { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -84,8 +88,10 @@ public sealed class StateStore
         return (id, secret);
     }
 
-    /// <summary>Checks a cookie of the form "{deviceId}.{secret}" in constant time.</summary>
-    public DeviceRecord? Authenticate(string? cookie)
+    /// <summary>Checks a cookie of the form "{deviceId}.{secret}" in constant time. <paramref name="away"/>
+    /// says which key it must match: the home key, or the away key for requests through the away
+    /// address.</summary>
+    public DeviceRecord? Authenticate(string? cookie, bool away = false)
     {
         if (string.IsNullOrWhiteSpace(cookie)) return null;
         var parts = cookie.Split('.', 2);
@@ -94,10 +100,48 @@ public sealed class StateStore
         {
             var device = _settings.Devices.FirstOrDefault(d => d.Id == parts[0]);
             if (device is null || Expired(device)) return null;
-            byte[] expected;
-            try { expected = Convert.FromHexString(device.TokenHash); }
+            string? stored = away ? device.AwayTokenHash : device.TokenHash;
+            if (stored is null) return null;
+            byte[] expected, given;
+            try
+            {
+                expected = Convert.FromHexString(stored);
+                given = Convert.FromHexString(Hash(parts[1]));
+            }
             catch (FormatException) { return null; }
-            return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(Hash(parts[1])), expected) ? device : null;
+            return CryptographicOperations.FixedTimeEquals(given, expected) ? device : null;
+        }
+    }
+
+    /// <summary>Gives a paired device a new away key (replacing an older one) and returns the
+    /// secret for its away cookie, or null when the device is gone or its pairing expired.</summary>
+    public (string Secret, string Name, DateTimeOffset ExpiresUtc)? SetAwayKey(string id)
+    {
+        var secret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        lock (_sync)
+        {
+            var device = _settings.Devices.FirstOrDefault(d => d.Id == id);
+            if (device is null || Expired(device)) return null;
+            device.AwayTokenHash = Hash(secret);
+            Save();
+            return (secret, device.Name, device.CreatedUtc + DeviceLifetime);
+        }
+    }
+
+    /// <summary>Forgets every away key, so no device can use the away address until it is set up
+    /// again. Runs whenever the server starts with away access off. Returns how many were removed.</summary>
+    public int ClearAwayKeys()
+    {
+        lock (_sync)
+        {
+            int count = 0;
+            foreach (var device in _settings.Devices.Where(d => d.AwayTokenHash is not null))
+            {
+                device.AwayTokenHash = null;
+                count++;
+            }
+            if (count > 0) Save();
+            return count;
         }
     }
 
@@ -111,7 +155,7 @@ public sealed class StateStore
     {
         lock (_sync)
             return _settings.Devices.Where(d => !Expired(d))
-                .Select(d => (object)new { id = d.Id, name = d.Name, createdUtc = d.CreatedUtc, lastSeenUtc = d.LastSeenUtc, expiresUtc = d.CreatedUtc + DeviceLifetime })
+                .Select(d => (object)new { id = d.Id, name = d.Name, createdUtc = d.CreatedUtc, lastSeenUtc = d.LastSeenUtc, expiresUtc = d.CreatedUtc + DeviceLifetime, away = d.AwayTokenHash is not null })
                 .ToList();
     }
 

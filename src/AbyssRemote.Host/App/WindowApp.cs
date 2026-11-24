@@ -137,7 +137,7 @@ internal sealed class WindowApp : IWindowActions
         var status = _statusSeen ? _runtime.Status : new HostStatus(HostPhase.Starting, _options);
         var devices = _runtime.Devices;
         _window.View.Show(new WindowState(status, _runtime.PairingCode, devices, _runtime.ConnectedDeviceIds, _runtime.Notices,
-            _setup, _preferences.CloseToTray, _startWithWindows, DateTimeOffset.UtcNow));
+            _setup, _preferences.CloseToTray, _startWithWindows, DateTimeOffset.UtcNow, _preferences.AwayHost));
         _tray.Show(status, devices.Count);
     }
 
@@ -284,6 +284,43 @@ internal sealed class WindowApp : IWindowActions
     {
         Save(_preferences with { Port = port });
         _options = _options with { Port = port };
+        await _runtime.RestartAsync(_options);
+    }
+
+    /// <summary>"Let added devices connect away from home". Needs the away address first, and
+    /// says once, plainly, what turning it on means.</summary>
+    public async void SetAway(bool on)
+    {
+        if (on && !AwayAccess.IsValidHost(_preferences.AwayHost))
+        {
+            _runtime.AddNotice("Type the away address first (for example remote.example.duckdns.org) and click Apply.");
+            Refresh();
+            return;
+        }
+        if (on && !_preferences.AwayExplained)
+        {
+            string explanation = $"Devices you have already added will be able to use Abyss Remote from anywhere at https://{_preferences.AwayHost}, "
+                + "through the Gaming Hub on this PC. That address is on the internet: whoever has one of those devices can control this PC "
+                + "from anywhere until you revoke it. Each device is set up once at home, and new devices can still only be added at home.";
+            if (!ConfirmDialog.Ask(_window, "Let added devices connect away from home?", explanation, "Turn on")) return;
+        }
+        Save(_preferences with { Away = on, AwayExplained = _preferences.AwayExplained || on });
+        _options = _options with { AwayHost = on ? _preferences.AwayHost.Trim().ToLowerInvariant() : null };
+        await _runtime.RestartAsync(_options);
+    }
+
+    /// <summary>Saves the away address. While away access is on, the server restarts with it.</summary>
+    public async void SetAwayHost(string host)
+    {
+        host = host.Trim().ToLowerInvariant();
+        if (!AwayAccess.IsValidHost(host)) return;
+        Save(_preferences with { AwayHost = host });
+        if (!_preferences.Away)
+        {
+            Refresh();
+            return;
+        }
+        _options = _options with { AwayHost = host };
         await _runtime.RestartAsync(_options);
     }
 

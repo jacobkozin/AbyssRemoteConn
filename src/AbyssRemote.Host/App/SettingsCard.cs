@@ -1,13 +1,15 @@
 namespace AbyssRemote.Host.App;
 
-/// <summary>The four settings: home-network mode, the port, starting with Windows and what
-/// closing the window does. A change is applied (and saved) at once; there is no OK button.</summary>
+/// <summary>The settings: home-network mode, the port, away access with its address, starting
+/// with Windows and what closing the window does. A change is applied (and saved) at once; there
+/// is no OK button.</summary>
 internal sealed class SettingsCard : Card
 {
-    private readonly CheckRow _lan, _autostart, _tray;
-    private readonly TextBox _port;
-    private readonly FlatButton _apply;
+    private readonly CheckRow _lan, _away, _autostart, _tray;
+    private readonly TextBox _port, _awayHost;
+    private readonly FlatButton _apply, _awayApply;
     private int _currentPort = LaunchOptions.DefaultPort;
+    private string _savedAwayHost = "";
     private bool _starting;
 
     public SettingsCard(IWindowActions actions) : base("Settings", actions)
@@ -19,10 +21,26 @@ internal sealed class SettingsCard : Card
             Text = LaunchOptions.DefaultPort.ToString(), AccessibleName = "Port",
         });
         _apply = Add(new FlatButton("Apply") { Enabled = false });
+        _away = Add(new CheckRow("Let added devices connect away from home"));
+        _awayHost = Add(new TextBox
+        {
+            BorderStyle = BorderStyle.None, BackColor = Palette.Background, ForeColor = Palette.Text, MaxLength = 253,
+            AccessibleName = "Away address", PlaceholderText = "remote.example.duckdns.org",
+        });
+        _awayApply = Add(new FlatButton("Apply") { Enabled = false, AccessibleName = "Apply the away address" });
         _autostart = Add(new CheckRow("Start with Windows"));
         _tray = Add(new CheckRow("Keep running in the tray when I close the window"));
 
         _lan.Click += (_, _) => Actions.SetHomeNetwork(!_lan.Checked);
+        _away.Click += (_, _) => Actions.SetAway(!_away.Checked);
+        _awayApply.Click += (_, _) => ApplyAwayHost();
+        _awayHost.TextChanged += (_, _) => { _awayApply.Enabled = CanApplyAwayHost; Invalidate(); };
+        _awayHost.GotFocus += (_, _) => Invalidate();
+        _awayHost.LostFocus += (_, _) => Invalidate();
+        _awayHost.KeyPress += (_, e) =>
+        {
+            if (e.KeyChar == (char)Keys.Enter) { e.Handled = true; ApplyAwayHost(); }
+        };
         _autostart.Click += (_, _) => Actions.SetStartWithWindows(!_autostart.Checked);
         _tray.Click += (_, _) => Actions.SetCloseToTray(!_tray.Checked);
         _apply.Click += (_, _) => ApplyPort();
@@ -44,9 +62,22 @@ internal sealed class SettingsCard : Card
         if (TypedPort is { } port && port != _currentPort && !_starting) Actions.SetPort(port);
     }
 
-    public void Show(HostStatus status, bool startWithWindows, bool closeToTray)
+    /// <summary>The name in the away box, tidied, when it is usable; otherwise null.</summary>
+    private string? TypedAwayHost => AwayAccess.IsValidHost(_awayHost.Text) ? _awayHost.Text.Trim().ToLowerInvariant() : null;
+
+    private bool CanApplyAwayHost => TypedAwayHost is { } host && host != _savedAwayHost && !_starting;
+
+    private void ApplyAwayHost()
+    {
+        if (CanApplyAwayHost) Actions.SetAwayHost(TypedAwayHost!);
+    }
+
+    /// <param name="awayHost">The saved away address, shown also while away access is off.</param>
+    public void Show(HostStatus status, bool startWithWindows, bool closeToTray, string awayHost = "")
     {
         _lan.Checked = status.Options.Lan;
+        // Checked only while the server really uses it (a saved "on" without a usable address is off).
+        _away.Checked = status.Options.AwayHost is not null;
         _autostart.Checked = startWithWindows;
         _tray.Checked = closeToTray;
         _starting = status.Phase == HostPhase.Starting;
@@ -56,8 +87,16 @@ internal sealed class SettingsCard : Card
             _currentPort = status.Options.Port;
             _port.Text = _currentPort.ToString();
         }
+        // Show the saved away address, but never overwrite what the user is typing.
+        if (awayHost != _savedAwayHost)
+        {
+            _savedAwayHost = awayHost;
+            if (!_awayHost.Focused) _awayHost.Text = awayHost;
+        }
         _lan.Enabled = !_starting; // one restart at a time
+        _away.Enabled = !_starting;
         _apply.Enabled = TypedPort is { } port && port != _currentPort && !_starting;
+        _awayApply.Enabled = CanApplyAwayHost;
     }
 
     protected override int Compose(Pass pass, int width)
@@ -85,6 +124,28 @@ internal sealed class SettingsCard : Card
             ? pass.Text("Use a number from 1024 to 65535.", Ui.Small, Palette.Danger, Pad, y, inner)
             : pass.Text("Changing the port restarts the server. The firewall rule is per port.", Ui.Small, Palette.Muted, Pad, y, inner);
         y += Ui.Px(12);
+
+        // Away from home: the switch, what it means, then the address on one line like the port.
+        height = _away.HeightFor(inner);
+        pass.Place(_away, Pad, y, inner, height);
+        y += height + Ui.Px(3);
+        string address = TypedAwayHost ?? (_savedAwayHost.Length > 0 ? _savedAwayHost : "the away address");
+        y += pass.Text($"Through the Gaming Hub at https://{address}. Each device is set up once at home; new ones can only be added at home.",
+            Ui.Small, Palette.Muted, Pad + indent, y, inner - indent) + Ui.Px(12);
+        int awayLabelWidth = Ui.MeasureLine("Away address", Ui.Body).Width, awayApplyWidth = _awayApply.WidthFor(Ui);
+        int awayFieldWidth = Math.Max(Ui.Px(120), inner - awayLabelWidth - Ui.Px(12) - awayApplyWidth - Ui.Px(8));
+        pass.Line("Away address", Ui.Body, Palette.Text, Pad, y + (fieldHeight - labelHeight) / 2, awayLabelWidth + 1);
+        var awayField = new Rectangle(Pad + awayLabelWidth + Ui.Px(12), y, awayFieldWidth, fieldHeight);
+        bool awayTyped = _awayHost.Text.Trim().Length > 0;
+        if (pass.Graphics is { } awayGraphics)
+            Ui.FillRounded(awayGraphics, awayField, Ui.Px(8), Palette.Background,
+                _awayHost.Focused ? Palette.Accent : awayTyped && TypedAwayHost is null ? Palette.Danger : Palette.Border);
+        pass.Place(_awayHost, awayField.X + Ui.Px(10), awayField.Y + (fieldHeight - _awayHost.PreferredHeight) / 2,
+            awayFieldWidth - Ui.Px(20), _awayHost.PreferredHeight);
+        pass.Place(_awayApply, awayField.Right + Ui.Px(8), y, awayApplyWidth, fieldHeight);
+        y += fieldHeight + Ui.Px(12);
+        if (awayTyped && TypedAwayHost is null)
+            y += pass.Text("Use a name like remote.example.duckdns.org, without https:// or a port.", Ui.Small, Palette.Danger, Pad, y, inner) + Ui.Px(12);
 
         height = _autostart.HeightFor(inner);
         pass.Place(_autostart, Pad, y, inner, height);

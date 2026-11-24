@@ -93,7 +93,7 @@ public sealed class WindowLayoutTests
             int samples = UiSnapshot.Samples().Count();
             Assert.AreEqual(samples * 2, Directory.GetFiles(folder, "window-*.png").Length);
             using (var picture = new Bitmap(Path.Combine(folder, "window-home-network@150.png")))
-                Assert.AreEqual(new Size(1650, 1410), picture.Size, "1100 x 940 logical pixels at 150%");
+                Assert.AreEqual(new Size(1650, 1620), picture.Size, "1100 x 1080 logical pixels at 150%");
             Assert.IsTrue(File.Exists(Path.Combine(folder, "confirm@100.png")));
             Assert.IsTrue(File.Exists(Path.Combine(folder, "tray-menu.png")));
             Assert.AreEqual(4, File.ReadAllLines(Path.Combine(folder, "checks.txt")).Length);
@@ -272,6 +272,8 @@ public sealed class WindowLayoutTests
         public void CheckSetupAgain() { }
         public void SetHomeNetwork(bool on) { }
         public void SetPort(int port) { }
+        public void SetAway(bool on) { }
+        public void SetAwayHost(string host) { }
         public void SetStartWithWindows(bool on) { }
         public void SetCloseToTray(bool on) { }
     }

@@ -48,7 +48,8 @@ internal sealed class DevicesCard : Card
 
     private string Detail(PairedDevice device) =>
         (_connected.Contains(device.Id) ? "Connected now" : $"Last seen {RelativeTime.Ago(device.LastSeenUtc, _now)}")
-        + $"  ·  paired {RelativeTime.Ago(device.CreatedUtc, _now)}";
+        + $"  ·  paired {RelativeTime.Ago(device.CreatedUtc, _now)}"
+        + (device.Away ? "  ·  away access" : "");
 
     protected override int Compose(Pass pass, int width)
     {

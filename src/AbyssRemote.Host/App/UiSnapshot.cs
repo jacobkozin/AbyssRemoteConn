@@ -74,7 +74,7 @@ internal static class UiSnapshot
         PairedDevice[] devices =
         [
             new("a", "Living room iPad", now.AddDays(-3), now.AddMinutes(-1), now.AddDays(27)),
-            new("b", "Phone", now.AddDays(-12), now.AddHours(-5), now.AddDays(18)),
+            new("b", "Phone", now.AddDays(-12), now.AddHours(-5), now.AddDays(18), Away: true),
             new("c", "Laptop in the study with a rather long name", now.AddHours(-30), now.AddMinutes(-40), now.AddDays(29)),
         ];
         NoticeLine[] notices =
@@ -88,9 +88,11 @@ internal static class UiSnapshot
         var notReady = new PhoneSetup(FirewallVerdict.NoRule, NetworkKind.Public, "Network 2", ControllerDriverInstalled: false);
         var connected = new HashSet<string> { "a" };
         var nobody = new HashSet<string>();
-        Size normal = new(1100, 940), narrow = new(600, 900);
+        Size normal = new(1100, 1080), narrow = new(600, 900); // tall enough that the first sample needs no scroll bar (see WindowLayoutTests)
 
         yield return ("home-network", new WindowState(Running(lan: true), code, devices, connected, notices, ready, true, true, now), normal);
+        yield return ("away", new WindowState(Running(lan: true, away: "remote.example.duckdns.org"), code, devices, connected, notices, ready, true, true, now,
+            AwayHost: "remote.example.duckdns.org"), normal);
         yield return ("this-pc", new WindowState(Running(lan: false), code, [], nobody, [], notReady, true, false, now), normal);
         yield return ("code-used", new WindowState(Running(lan: true), code with { State = PairingCodeState.Used, Digits = "" }, devices[..1], nobody, notices[..2], notReady, false, false, now), normal);
         var failed = new HostStatus(HostPhase.Failed, new HostRunOptions(false, 8444),
@@ -101,14 +103,15 @@ internal static class UiSnapshot
         yield return ("smallest", new WindowState(Running(lan: true), code, devices, connected, notices, ready, true, false, now), new Size(600, 480));
     }
 
-    private static HostStatus Running(bool lan)
+    private static HostStatus Running(bool lan, string? away = null)
     {
         string[] lanUrls = lan ? ["https://192.168.1.20:8444", "https://172.24.96.1:8444"] : [];
         var running = new RunningHost(8444, lan, "https://127.0.0.1:8444", lanUrls,
             ServerFingerprint: new string('0', 64),
             RootFingerprint: "3F9A1C0D72B45E8811AF09C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F607",
-            RootCertificate: [], RootCertificateFile: @"C:\Users\you\AppData\Local\AbyssRemote\AbyssRemote-RootCA.cer");
-        return new HostStatus(HostPhase.Running, new HostRunOptions(lan, 8444), running);
+            RootCertificate: [], RootCertificateFile: @"C:\Users\you\AppData\Local\AbyssRemote\AbyssRemote-RootCA.cer",
+            AwayUrl: away is null ? null : "https://" + away);
+        return new HostStatus(HostPhase.Running, new HostRunOptions(lan, 8444, AwayHost: away), running);
     }
 
     /// <summary>The pictures are not clickable.</summary>
@@ -125,6 +128,8 @@ internal static class UiSnapshot
         public void CheckSetupAgain() { }
         public void SetHomeNetwork(bool on) { }
         public void SetPort(int port) { }
+        public void SetAway(bool on) { }
+        public void SetAwayHost(string host) { }
         public void SetStartWithWindows(bool on) { }
         public void SetCloseToTray(bool on) { }
     }

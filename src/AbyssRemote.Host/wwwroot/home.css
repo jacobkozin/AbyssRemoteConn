@@ -16,6 +16,13 @@
 .quiet strong { color: var(--text); overflow-wrap: anywhere; }
 .status-line { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
 .status-line:empty { display: none; }
+/* Away from home (1.2), inside This device */
+.away-panel { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.away-panel h3 { margin: 0 0 6px; font-size: 15px; }
+.away-panel .button-row { margin-top: 10px; }
+.away-handoff { display: grid; gap: 8px; margin-top: 10px; }
+.away-handoff .button { justify-self: start; }
+.away-code { font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; white-space: nowrap; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .panel .button-row + .button-row, .panel .quiet + .button-row { margin-top: 10px; }
 .field-label { display: block; margin: 16px 0 6px; }

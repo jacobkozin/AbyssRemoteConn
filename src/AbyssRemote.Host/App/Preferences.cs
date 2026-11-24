@@ -20,6 +20,17 @@ public sealed record Preferences
     /// <summary>The "still running in the tray" tip has been shown once.</summary>
     public bool TrayTipShown { get; init; }
 
+    /// <summary>"Let added devices connect away from home" (1.2). Only works with a usable
+    /// <see cref="AwayHost"/>; see <see cref="AwayAccess"/>.</summary>
+    public bool Away { get; init; }
+
+    /// <summary>The public address the Gaming Hub's proxy forwards to this PC, for example
+    /// "remote.example.duckdns.org". Kept when away access is turned off.</summary>
+    public string AwayHost { get; init; } = "";
+
+    /// <summary>The one-time warning about away access has been shown and accepted.</summary>
+    public bool AwayExplained { get; init; }
+
     public static bool IsValidPort(int port) => port is >= 1024 and <= 65535;
 }
 

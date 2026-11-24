@@ -96,6 +96,9 @@ between restarts.
    Windows user certificate store with non-exportable keys. The server certificate is reissued
    by the same root when it nears expiry or the LAN address changes, so phones keep trusting it.
 3. **Host allowlist:** requests must name a host this PC really has (DNS-rebinding defense).
+   Away access (1.2) adds one more name, the away address, which only counts with a proxy
+   header on a loopback connection (`AwayRequests.Route`); proxy headers with any other name
+   are refused. Away requests need the device's separate away key (`StateStore`).
 4. **Pairing:** an 8-digit code from a cryptographic RNG, shown only in the Abyss Remote
    window (in home-network mode also inside its QR code), valid 10 minutes and once. Limits:
    5 tries per address per 5 minutes, and 20 wrong tries in total destroy the code.

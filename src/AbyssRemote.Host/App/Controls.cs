@@ -161,12 +161,16 @@ internal interface IWindowActions
     void CheckSetupAgain();
     void SetHomeNetwork(bool on);
     void SetPort(int port);
+    void SetAway(bool on);
+    void SetAwayHost(string host);
     void SetStartWithWindows(bool on);
     void SetCloseToTray(bool on);
 }
 
 /// <summary>Everything the window shows, as plain data. WindowApp builds one from the runtime
-/// and the settings whenever something changes; the snapshot tool builds them from samples.</summary>
+/// and the settings whenever something changes; the snapshot tool builds them from samples.
+/// <paramref name="AwayHost"/> is the saved away address, which the settings card shows also
+/// while away access is off.</summary>
 internal sealed record WindowState(
     HostStatus Status,
     PairingCode Code,
@@ -176,7 +180,8 @@ internal sealed record WindowState(
     PhoneSetup Setup,
     bool CloseToTray,
     bool StartWithWindows,
-    DateTimeOffset Now);
+    DateTimeOffset Now,
+    string AwayHost = "");
 
 /// <summary>One walk over a card's content. The same code runs twice: once without a
 /// <see cref="Graphics"/> to measure the card and put its buttons in place, and once with one

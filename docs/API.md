@@ -17,8 +17,10 @@ unknown fields; new behavior that would break existing clients belongs under a n
 2. `POST /api/v1/pair` with `{"code":"01234567","label":"My iPhone"}` and a same-origin
    `Origin` header. On success the host sets the cookie
    `abyss_remote_session` (`Secure; HttpOnly; SameSite=Strict; Path=/`, 30 days).
-3. `GET /api/v1/me` returns `{ id, device, csrf, version, features: { gameMode } }`. The CSRF
-   token changes every time the host starts; fetch it again after reconnecting.
+3. `GET /api/v1/me` returns `{ id, device, csrf, version, features: { gameMode }, away }`.
+   The CSRF token changes every time the host starts; fetch it again after reconnecting.
+   `away` is `{ available, url, here, ready }`: the PC allows away access, its address, this
+   request came that way, and this device has its away key.
 4. State-changing requests send header `X-Abyss-CSRF: <csrf>` and a matching `Origin`. The
    browser client repeats a refused change once after fetching `/api/v1/me` again.
 5. Every WebSocket requests the subprotocols `abyss-v1, <csrf>` and needs the cookie and a
@@ -34,9 +36,11 @@ answer is 403. Both have an empty body, and so do most 404 answers. Other errors
 
 | Route | Needs | Result |
 | --- | --- | --- |
-| `GET /api/v1/info` | nothing | `{ app, version }` |
-| `GET /AbyssRemote-RootCA.cer` | nothing | The root certificate's public part, as a download |
-| `POST /api/v1/pair` | Origin | `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries |
+| `GET /api/v1/info` | nothing | `{ app, version, away }` (`away`: true at the away address) |
+| `GET /AbyssRemote-RootCA.cer` | nothing | The root certificate's public part, as a download. 404 at the away address |
+| `POST /api/v1/pair` | Origin | `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries, 403 at the away address |
+| `POST /api/v1/away/code` | cookie + Origin + CSRF, at home | `{ code, url, address, expiresUtc }`: a one-time away code for this device. 409 while away access is off, 403 at the away address |
+| `POST /api/v1/away/redeem` | Origin, at the away address | Body `{ code }`. `{ ready, name }`, sets the away cookie. 400 wrong, expired or locked; 404 at home |
 | `GET /api/v1/me` | cookie | `{ id, device, csrf, version, features }` |
 | `GET /api/v1/displays` | cookie | `[{ id, name, x, y, width, height, primary, friendlyName, refreshHz, scale }]` in physical pixels |
 | `GET /api/v1/displays/{id}/preview?width=` | cookie | JPEG still of one monitor, 160–960 px wide (default 480). 404, 503 |
@@ -63,6 +67,16 @@ Every response carries a strict Content-Security-Policy, `X-Frame-Options: DENY`
 `nosniff`, `no-referrer` and `Cache-Control: no-store`. The one exception is a Steam cover,
 which is sent with `Cache-Control: private, max-age=86400`. Requests naming an unknown host
 get 421.
+
+### Away from home (1.2)
+
+While away access is on, a reverse proxy on the PC forwards the away address to the host. A
+request counts as away when its `Host` is that address, it has `X-Forwarded-For` or
+`Forwarded`, and it comes from loopback; otherwise proxy headers mean 421. At the away
+address the session cookie must hold the device's away key (from `POST /api/v1/away/redeem`),
+not its home key. The same cookie name is used; the browser keeps one per address. A code is
+twelve characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-EFGH-JKLM`; spaces,
+dashes and small letters are ignored. The link in `url` carries it as `#away=<code>`.
 
 ### Root certificate: `GET /AbyssRemote-RootCA.cer`
 

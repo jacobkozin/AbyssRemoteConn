@@ -18,6 +18,10 @@ cookies, certificates, logs or network addresses.
 
 Defended against:
 
+- **Anyone on the internet, while away access is on (1.2).** They can only reach the away
+  address through your reverse proxy. It never pairs a device and only lets in a device's
+  away key, which only a device paired at home can get.
+
 - **Other devices on the same network** that try to pair, guess codes, or use the API without
   a session.
 - **Websites you visit** on a paired phone or on the PC, which could try cross-site requests,
@@ -60,6 +64,48 @@ someone who controls your Wi-Fi equipment; denial of service by a device you pai
 | Output on the PC | Names of devices and games lose control characters before they are stored, listed or shown; an upload name with a control character is refused | `StateStore.CleanName`, `SteamLibrary.CleanName`, `TransferName` | `DeviceNamesLoseControlCharacters…`, `GameNamesLoseControlCharactersAndAreCut`, `EveryControlCharacterIsRefusedAnywhereInTheName` |
 | Resource limits | Request bodies 64 KB (only an upload may be larger, and only after the cookie, Origin, CSRF and name checks), 64 connections, per-kind socket caps (6 total, 1–2 per device), at most 2 video frames in flight, bounded audio queue, one screen capture at a time | `AbyssServer`, `SessionRegistry`, `VideoStream`, `FileTransferEndpoints` | `AReconnectReplaces…`, `VideoIsFlowControlledByAcks`, `OtherRequestsKeepTheSmallBodyLimit` |
 | No secrets in the repo | `settings.json`, certificates, keys, logs and builds are git-ignored; state lives in `%LOCALAPPDATA%\AbyssRemote` | `.gitignore` | review |
+
+## What 1.2 added
+
+1.2 is the first version whose login can face the internet, so this section says exactly what
+is and is not exposed. Away access is off by default.
+
+- **Only through a proxy on this PC.** Abyss Remote opens nothing new. A request counts as
+  away only when all three hold: its `Host` is the away address, it carries a proxy header
+  (`X-Forwarded-For` or `Forwarded`), and the connection comes from loopback. The away
+  address without them, and proxy headers with any other name, get 421, so an away request
+  can never pass as a home one. Away requests get `Strict-Transport-Security`.
+- **Nothing is added away.** The away address refuses `POST /api/v1/pair` (even with a valid
+  code, which stays usable at home) and the root-certificate download.
+- **A separate key per device.** At home, a paired device asks for a one-time away code for
+  itself. Redeeming it at the away address gives that browser a second secret, stored as a
+  hash next to the home one. A home key never works away and an away key never works at
+  home, so a cookie copied off a device at home is no use from the internet.
+- **The codes.** Twelve characters from 32 (2^60 possibilities), one per device, valid ten
+  minutes, single use, compared in constant time. Twenty wrong tries in total destroy every
+  open code. The code travels in the URL fragment, so it is never in a request line or a
+  proxy log.
+- **Taking it back.** Revoking a device or signing it out ends both keys and closes its
+  sockets. Turning the setting off clears every away key on the next start, so devices have
+  to be set up again after it is turned back on.
+
+The proxy is part of the design. The Gaming Hub's Caddy (Hub release R240) is the reference:
+
+```text
+remote.<hub address> {
+	reverse_proxy https://127.0.0.1:8444 {
+		header_up Host {hostport}      # Caddy would otherwise send 127.0.0.1:8444 to an HTTPS upstream
+		transport http {
+			tls_server_name 127.0.0.1
+			tls_trust_pool inline { trust_der <Abyss Remote's root certificate, base64 DER> }
+		}
+	}
+}
+```
+
+It keeps the browser's `Host`, sets `X-Forwarded-For` to the address it really saw, checks
+Abyss Remote's certificate against its own root (never `tls_insecure_skip_verify`), and
+carries the root inline. That way a missing file cannot stop the proxy from starting.
 
 ## What the 1.0 review found and fixed
 
@@ -129,6 +175,15 @@ previews, in the browser against the real host on loopback. Lock, sleep, startin
 Big Picture have only been run against stand-ins.
 
 ## Known risks and limitations
+
+- **Away access puts a full-control login on the internet.** Only an away key gets in, but a
+  lost or stolen device that was set up works from anywhere until you revoke it in the window.
+  There is still no MFA. Anyone can make the twenty wrong guesses that destroy the open away
+  codes; ask for a new code at home.
+- **The proxy is trusted.** A proxy that sent away traffic with another `Host`, dropped
+  `X-Forwarded-For`, or skipped the certificate check would weaken these rules. Abyss Remote
+  refuses proxy headers for any name other than the away address, so a misconfigured proxy is
+  refused rather than treated as home.
 
 - **No independent audit or penetration test.**
 - **Root certificate trust is powerful.** A device that trusts the Abyss Remote root will trust

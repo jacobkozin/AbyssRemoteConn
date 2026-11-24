@@ -16,6 +16,7 @@ import { api, fetchFile, refreshIdentity, session } from './api.js';
 import { $, el, icon, saveBlob } from './dom.js';
 import { fileNameFromDisposition } from './format.js';
 import { initPairing, clearPairCode } from './pairing.js';
+import { initAwayView, redeemAwayCode, takeAwayCodeFromAddress } from './away.js';
 import { initHome, showHomeScreen, hideHomeScreen } from './home.js';
 import { createMonitorPicker, monitorLabel, pickMonitor } from './monitors.js';
 
@@ -105,7 +106,7 @@ function applySettings(saved) {
 
 // ---------------------------------------------------------------- views
 
-const views = { pair: $('pairView'), home: $('homeView'), remote: $('remoteView') };
+const views = { pair: $('pairView'), away: $('awayView'), home: $('homeView'), remote: $('remoteView') };
 function showView(name) {
   for (const [key, view] of Object.entries(views)) view.classList.toggle('hidden', key !== name);
 }
@@ -134,9 +135,25 @@ function showPair(error = '') {
   leaveStream();
   hideHomeScreen();
   session.csrf = null;
+  if (awayAddress) {
+    // At the away address nothing can be paired: a device is set up at home with a code.
+    showView('away');
+    $('awayError').textContent = /pair/i.test(error) ? AWAY_LOST : error;
+    setNetwork('Not set up');
+    return;
+  }
   showView('pair');
   $('pairError').textContent = error;
   setNetwork('Not paired');
+}
+
+// True at the away address (the public one the Gaming Hub forwards to the PC), false at home,
+// null until the PC has said. /api/v1/info answers without a session.
+let awayAddress = null;
+const AWAY_LOST = 'This device is not set up for away access any more. Set it up again at home.';
+async function learnAddress() {
+  if (awayAddress !== null) return;
+  try { awayAddress = Boolean((await api('/api/v1/info')).away); } catch { /* not reachable: initialize says so */ }
 }
 function showHome() {
   leaveStream();
@@ -166,6 +183,13 @@ function showRemote() {
 // The CSRF token changes whenever the host restarts, so this and every reconnect fetch the
 // identity again (refreshIdentity in api.js).
 async function initialize() {
+  await learnAddress();
+  // A link from the home screen carries a one-time away code; it turns into this browser's away key.
+  const awayCode = awayAddress ? takeAwayCodeFromAddress() : '';
+  if (awayCode) {
+    try { await redeemAwayCode(awayCode); }
+    catch (error) { showPair(''); $('awayError').textContent = error.message; return; }
+  }
   try {
     await refreshIdentity();
   } catch (error) {
@@ -1549,6 +1573,7 @@ applySettings(loadSettings());
 buildToggles();
 syncToggles();
 initPairing({ onPaired: initialize });
+initAwayView({ onReady: initialize });
 initHome({
   openStream,
   prepareSound,

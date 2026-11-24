@@ -35,8 +35,15 @@ public sealed class ServerContext
     public Features.IHostActions Actions { get; init; } = new Features.WindowsHostActions();
     public Features.ISteam Steam { get; init; } = new Features.WindowsSteam();
 
-    /// <summary>The paired device this request's session cookie belongs to, or null.</summary>
-    public DeviceRecord? Device(HttpContext ctx) => State.Authenticate(ctx.Request.Cookies[AbyssServer.SessionCookie]);
+    /// <summary>Away from home (1.2): the public address the Gaming Hub's proxy forwards here, and
+    /// its one-time codes. Null while the setting is off; then that address is refused like any
+    /// unknown host name.</summary>
+    public AwayAccess? Away { get; init; }
+
+    /// <summary>The paired device this request's session cookie belongs to, or null. A request
+    /// through the away address must carry the device's away key; any other needs its home key.</summary>
+    public DeviceRecord? Device(HttpContext ctx) =>
+        State.Authenticate(ctx.Request.Cookies[AbyssServer.SessionCookie], AwayRequests.IsAway(ctx));
 
     /// <summary>The check for every state-changing request: paired cookie + exact Origin +
     /// this device's CSRF token in the X-Abyss-CSRF header.</summary>
@@ -92,10 +99,16 @@ public static class AbyssServer
             headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; " +
                 "connect-src 'self' wss:; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
             headers["Cache-Control"] = "no-store";
-            if (!c.Protection.KnownHost(ctx))
+            switch (AwayRequests.Route(ctx, c.Protection, c.Away))
             {
-                ctx.Response.StatusCode = StatusCodes.Status421MisdirectedRequest;
-                return;
+                case RequestRoute.Away:
+                    AwayRequests.MarkAway(ctx);
+                    // The away address has a public certificate (the proxy's), so browsers may pin HTTPS for it.
+                    headers["Strict-Transport-Security"] = "max-age=31536000";
+                    break;
+                case RequestRoute.Refused:
+                    ctx.Response.StatusCode = StatusCodes.Status421MisdirectedRequest;
+                    return;
             }
             await next();
         });
@@ -116,18 +129,24 @@ public static class AbyssServer
         void DeleteCookie(HttpContext ctx) =>
             ctx.Response.Cookies.Delete(SessionCookie, new CookieOptions { Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/" });
 
-        app.MapGet("/api/v1/info", () => Results.Ok(new { app = AppInfo.Name, version = AppInfo.Version }));
+        // "away" tells the browser which screen an unpaired visitor gets: pairing, or the away code.
+        app.MapGet("/api/v1/info", (HttpContext ctx) => Results.Ok(new { app = AppInfo.Name, version = AppInfo.Version, away = AwayRequests.IsAway(ctx) }));
 
         // The root certificate a phone has to trust before its browser accepts this host. No
         // pairing needed: Export(Cert) writes the public certificate only, never the private
-        // key, and it is the same file the PC keeps in %LOCALAPPDATA%\AbyssRemote.
-        app.MapGet("/AbyssRemote-RootCA.cer", () => c.RootCertificate is null
+        // key, and it is the same file the PC keeps in %LOCALAPPDATA%\AbyssRemote. The away
+        // address has a public certificate, so it has no use for this one.
+        app.MapGet("/AbyssRemote-RootCA.cer", (HttpContext ctx) => c.RootCertificate is null || AwayRequests.IsAway(ctx)
             ? Results.NotFound()
             : Results.File(c.RootCertificate.Export(X509ContentType.Cert), "application/x-x509-ca-cert", "AbyssRemote-RootCA.cer"));
 
         app.MapPost("/api/v1/pair", IResult (HttpContext ctx, PairRequest request) =>
         {
             if (!RequestProtection.SameOrigin(ctx)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            // New devices are added at home only, whatever code someone has.
+            if (AwayRequests.IsAway(ctx))
+                return Results.Json(new { error = "New devices can only be added on your home network. Pair this device at home first." },
+                    statusCode: StatusCodes.Status403Forbidden);
             string label = StateStore.CleanName(request.Label ?? "");
             string code = (request.Code ?? "").Trim();
             if (code.Length == 0 || label.Length == 0)
@@ -163,7 +182,52 @@ public static class AbyssServer
             {
                 id = device.Id, device = device.Name, csrf = c.Protection.Csrf(device.Id), version = AppInfo.Version,
                 features = new { gameMode = c.Desktop.HardwareVideoAvailable },
+                // available: the PC allows away access; here: this request came that way;
+                // ready: this device has its away key.
+                away = new { available = c.Away is not null, url = c.Away?.Url, here = AwayRequests.IsAway(ctx), ready = device.AwayTokenHash is not null },
             });
+        });
+
+        // Away from home, step 1, at home: a paired device asks for a one-time code for itself.
+        app.MapPost("/api/v1/away/code", IResult (HttpContext ctx) =>
+        {
+            var device = Device(ctx);
+            if (!Authorized(ctx, device)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            if (c.Away is not { } away)
+                return Results.Json(new { error = "Away access is turned off in Abyss Remote on the PC." }, statusCode: StatusCodes.Status409Conflict);
+            if (AwayRequests.IsAway(ctx))
+                return Results.Json(new { error = "Set up away access at home, on your home network address." }, statusCode: StatusCodes.Status403Forbidden);
+            var (code, expires) = away.Codes.Issue(device!.Id);
+            c.Notice($"\"{device.Name}\" asked for an away code.");
+            // The code travels in the fragment, so it never reaches the proxy's or this server's request logs.
+            return Results.Ok(new { code = AwayCodes.Format(code), url = $"{away.Url}/#away={code}", address = away.Url, expiresUtc = expires });
+        });
+
+        // Away from home, step 2, at the away address: the code gives this browser the device's away key.
+        app.MapPost("/api/v1/away/redeem", IResult (HttpContext ctx, AwayRedeemRequest request) =>
+        {
+            if (!AwayRequests.IsAway(ctx) || c.Away is not { } away) return Results.NotFound();
+            if (!RequestProtection.SameOrigin(ctx)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            string from = AwayRequests.ClientAddress(ctx);
+            var (result, deviceId) = away.Codes.TryUse(request.Code);
+            if (result == AwayCodeResult.Locked)
+            {
+                c.Notice($"Away codes were locked after too many wrong tries (last from {from}). Ask for a new code at home.");
+                return Results.BadRequest(new { error = "Too many wrong codes. At home, ask for a new code on this device." });
+            }
+            var key = result == AwayCodeResult.Accepted ? c.State.SetAwayKey(deviceId!) : null;
+            if (key is not { } given)
+            {
+                c.Notice($"Refused an away code from {from}.");
+                return Results.BadRequest(new { error = "That code is wrong or expired. At home, ask for a new one on this device." });
+            }
+            c.Notice($"\"{given.Name}\" can now connect away from home (set up from {from}).");
+            ctx.Response.Cookies.Append(SessionCookie, $"{deviceId}.{given.Secret}", new CookieOptions
+            {
+                HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict,
+                IsEssential = true, Path = "/", Expires = given.ExpiresUtc,
+            });
+            return Results.Ok(new { ready = true, name = given.Name });
         });
 
         app.MapGet("/api/v1/displays", (HttpContext ctx) =>
@@ -357,7 +421,7 @@ public static class AbyssServer
             ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
-        var device = c.State.Authenticate(ctx.Request.Cookies[SessionCookie]);
+        var device = c.Device(ctx); // the home key, or the away key at the away address
         var protocols = ctx.WebSockets.WebSocketRequestedProtocols;
         if (device is null || !RequestProtection.SameOrigin(ctx) || protocols.Count != 2
             || protocols[0] != SocketProtocol || !c.Protection.ValidCsrf(protocols[1], device.Id))

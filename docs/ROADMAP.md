@@ -126,6 +126,10 @@ item also stays open when its real effect on the PC has never been run.
 - [x] A demo server for trying the browser client against pretend monitors, games and files. *Used for the Chromium checks of the client at four window sizes.*
 - [x] README, ARCHITECTURE, SECURITY and API describe 1.1, including what has not been tested.
 
+## Version 1.2: away from home
+
+- [x] Devices added at home can use a public away address through a reverse proxy on the same PC: a setting with the address, one-time away codes from This device, a separate away key per device, and no pairing or root certificate there. *443 tests (2 skipped) and twelve browser check files; end to end in a phone-sized headless Chrome through a test Caddy with the Gaming Hub's proxy settings.* _(device)_ on mobile data.
+
 ## Next
 
 - Test on a real iPhone and iPad: certificate download and trust, scanning the QR code, touch
@@ -142,6 +146,7 @@ item also stays open when its real effect on the PC has never been run.
 
 ## Not planned
 
-- Access from outside the home network (relay, NAT traversal, port forwarding).
+- A relay, NAT traversal or port forwarding. (Away access in 1.2 works through your own HTTPS
+  reverse proxy on the same PC instead.)
 - Multiple users or roles, MFA, signed installer, auto-update.
 - HDR, UDP or WebRTC transport.

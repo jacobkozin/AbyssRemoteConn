@@ -2,7 +2,7 @@
 // changes something carries the CSRF header" lives in one place (see docs/SECURITY.md).
 
 /** Who this browser is to the PC. Filled by refreshIdentity(). */
-export const session = { csrf: null, id: null, device: '', features: {} };
+export const session = { csrf: null, id: null, device: '', features: {}, away: null };
 
 function send(path, options) {
   const headers = { ...(options.headers || {}) };
@@ -41,6 +41,7 @@ export async function refreshIdentity() {
   session.id = me.id;
   session.device = me.device || '';
   session.features = me.features || {};
+  session.away = me.away || null;
 }
 
 /** A plain GET that is not JSON (a picture, a screenshot). Returns the Response when it is

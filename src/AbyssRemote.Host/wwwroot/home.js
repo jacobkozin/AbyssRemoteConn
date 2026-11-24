@@ -7,6 +7,7 @@ import { confirmAction } from './dialog.js';
 import { createMonitorPicker } from './monitors.js';
 import { initLibrary, loadLibrary } from './library.js';
 import { initFiles, loadFiles } from './files.js';
+import { initAwayPanel, showAwayPanel } from './away.js';
 
 // What the PC can be told to do, with the question asked first. Both cut this device off,
 // so neither happens on a single tap.
@@ -52,11 +53,13 @@ export function initHome(given) {
     if (!hidden) loadDevices();
   });
   $('signOut').addEventListener('click', signOut);
+  initAwayPanel({ unpaired });
 }
 
 /** Fills the screen with the PC's current state and starts the live monitor pictures. */
 export function showHomeScreen() {
   $('deviceLabel').textContent = session.device;
+  showAwayPanel(session.away);
   monitors.start();
   loadLibrary();
   loadFiles();

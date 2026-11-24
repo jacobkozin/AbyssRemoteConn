@@ -4,6 +4,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using AbyssRemote.Host.App;
 
 namespace AbyssRemote.Host;
@@ -37,8 +38,11 @@ public static class SmokeTest
             };
             using var http = new HttpClient(handler) { BaseAddress = baseUri, Timeout = TimeSpan.FromSeconds(8) };
 
-            var info = await http.GetFromJsonAsync<Dictionary<string, string>>("/api/v1/info");
-            Check(info?["app"] == AppInfo.Name && info["version"] == AppInfo.Version, $"/api/v1/info identifies {AppInfo.Name} {AppInfo.Version} over pinned TLS");
+            // Not every value is text since 1.2 ("away" is true or false), so read it as JSON.
+            var info = await http.GetFromJsonAsync<JsonElement>("/api/v1/info");
+            Check(info.GetProperty("app").GetString() == AppInfo.Name && info.GetProperty("version").GetString() == AppInfo.Version
+                    && info.TryGetProperty("away", out var away) && away.ValueKind == JsonValueKind.False,
+                $"/api/v1/info identifies {AppInfo.Name} {AppInfo.Version} over pinned TLS, as a request from this PC");
 
             using (var home = await http.GetAsync("/"))
             {

@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-11-23)
+
+- **Away from home.** A new setting, "Let added devices connect away from home", with an away
+  address such as `remote.example.duckdns.org`. A reverse proxy on the same PC (on the
+  development PC, the Gaming Hub's Caddy) forwards that public HTTPS address to Abyss Remote
+  over loopback. Only devices paired at home can use it. Each one asks for a one-time away
+  code under This device while at home, and the code, or the link that carries it, gives that
+  browser a separate away key. Pairing and the root certificate are refused at the away
+  address. Revoking a device ends both keys, and turning the setting off forgets every away
+  key. See [Security](docs/SECURITY.md#what-12-added).
+- The window lists which devices have away access, and the away address sits under the port
+  in Settings.
+- Requests that carry proxy headers (`X-Forwarded-For`, `Forwarded`) for any name other than
+  the away address are refused with 421.
+- The demo server takes `ABYSS_REMOTE_DEMO_AWAY=<address>` to try the away screens behind a
+  test proxy.
 
 - Phone cursor feedback is drawn immediately, independently of desktop video. Host cursor
   snapshots reconcile the position without replaying stale movement.

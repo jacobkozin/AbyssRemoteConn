@@ -4,14 +4,17 @@ namespace AbyssRemote.Host.App;
 /// server with new options.</summary>
 /// <param name="Lan">False: this PC only (loopback). True: devices on the home network too.</param>
 /// <param name="RenewCertificate">Issue a fresh server certificate when starting.</param>
-public sealed record HostRunOptions(bool Lan, int Port, bool RenewCertificate = false)
+/// <param name="AwayHost">The away address when away access is on, otherwise null.</param>
+public sealed record HostRunOptions(bool Lan, int Port, bool RenewCertificate = false, string? AwayHost = null)
 {
     /// <summary>What the command line asks for wins for this run; everything else comes from
-    /// the saved settings.</summary>
+    /// the saved settings. Away access needs the setting and a usable address; the away
+    /// address reaches this PC through loopback, so it works in both network modes.</summary>
     public static HostRunOptions From(LaunchOptions commandLine, Preferences saved) => new(
         Lan: commandLine.Lan || (!commandLine.LocalOnly && saved.Lan),
         Port: commandLine.PortGiven ? commandLine.Port : saved.Port,
-        RenewCertificate: commandLine.RenewCert);
+        RenewCertificate: commandLine.RenewCert,
+        AwayHost: saved.Away && AwayAccess.IsValidHost(saved.AwayHost) ? saved.AwayHost.Trim().ToLowerInvariant() : null);
 }
 
 public enum HostPhase { Stopped, Starting, Running, Failed }
@@ -29,6 +32,7 @@ public sealed record StartProblem(StartProblemKind Kind, string Message);
 /// <param name="RootFingerprint">SHA-256 of the root certificate, as hex. Phones show the same value.</param>
 /// <param name="RootCertificate">The root certificate's public part (DER), ready to save as a .cer file.</param>
 /// <param name="RootCertificateFile">Where the certificate source keeps a copy of that file.</param>
+/// <param name="AwayUrl">The away address while away access is on, otherwise null.</param>
 public sealed record RunningHost(
     int Port,
     bool Lan,
@@ -37,7 +41,8 @@ public sealed record RunningHost(
     string ServerFingerprint,
     string RootFingerprint,
     byte[] RootCertificate,
-    string RootCertificateFile)
+    string RootCertificateFile,
+    string? AwayUrl = null)
 {
     /// <summary>The address to give to another device: the best network address in
     /// home-network mode, otherwise the one for this PC.</summary>
@@ -83,8 +88,9 @@ public sealed record PairingCode(PairingCodeState State, string Digits, DateTime
         IsUsable(now) ? $"{baseUrl}/#pair={Digits}" : baseUrl + "/";
 }
 
-/// <summary>A paired device, as the window lists it (the same fields /api/v1/devices returns).</summary>
-public sealed record PairedDevice(string Id, string Name, DateTimeOffset CreatedUtc, DateTimeOffset LastSeenUtc, DateTimeOffset ExpiresUtc);
+/// <summary>A paired device, as the window lists it (the same fields /api/v1/devices returns).
+/// <paramref name="Away"/>: it is set up for away access.</summary>
+public sealed record PairedDevice(string Id, string Name, DateTimeOffset CreatedUtc, DateTimeOffset LastSeenUtc, DateTimeOffset ExpiresUtc, bool Away = false);
 
 /// <summary>One line of the activity list: a pairing, a revocation, a refused connection.</summary>
 public sealed record NoticeLine(DateTimeOffset Time, string Message);

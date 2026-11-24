@@ -99,6 +99,7 @@ h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: cl
 .pair-card form { display: grid; gap: 8px; margin-top: 20px; }
 .pair-card input { margin-bottom: 10px; }
 .pair-card input#pairCode { font-size: 26px; letter-spacing: 5px; text-align: center; font-variant-numeric: tabular-nums; }
+.pair-card input#awayCode { font-size: 22px; letter-spacing: 3px; text-align: center; text-transform: uppercase; }
 .help { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; }
 .help summary { min-height: 44px; padding: 11px 14px; font-weight: 600; }
 .help > :not(summary) { margin: 0 14px 12px; }

@@ -201,8 +201,12 @@ public sealed class TestServer : IAsyncDisposable
     public string Origin => $"https://{BaseUri.Authority}";
     public IReadOnlyList<string> Notices { get { lock (_notices) return _notices.ToList(); } }
 
-    private TestServer()
+    /// <summary>Away access as the server sees it, or null when the test server was started without it.</summary>
+    public AwayAccess? Away { get; }
+
+    private TestServer(string? awayHost)
     {
+        Away = awayHost is null ? null : new AwayAccess(awayHost);
         _dataDir = Directory.CreateTempSubdirectory("abyss-remote-test-").FullName;
         State = new StateStore(_dataDir);
         Transfer = new TransferFolder(Path.Combine(_dataDir, "transfer"));
@@ -214,6 +218,7 @@ public sealed class TestServer : IAsyncDisposable
             State = State,
             Pairing = Pairing,
             Protection = new RequestProtection(["127.0.0.1", "localhost"]),
+            Away = Away,
             Sessions = Sessions,
             Desktop = Desktop,
             Clipboard = Clipboard,
@@ -226,9 +231,10 @@ public sealed class TestServer : IAsyncDisposable
         });
     }
 
-    public static async Task<TestServer> StartAsync()
+    /// <param name="awayHost">Turns away access on with this address (see AwayClient).</param>
+    public static async Task<TestServer> StartAsync(string? awayHost = null)
     {
-        var server = new TestServer();
+        var server = new TestServer(awayHost);
         await server._app.StartAsync();
         server.BaseUri = new Uri(server._app.Urls.First());
         return server;

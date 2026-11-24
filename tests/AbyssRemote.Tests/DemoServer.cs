@@ -26,7 +26,7 @@ namespace AbyssRemote.Tests;
 [TestClass]
 public sealed class DemoServer
 {
-    private const string Switch = "ABYSS_REMOTE_DEMO", FolderSetting = "ABYSS_REMOTE_DEMO_DIR";
+    private const string Switch = "ABYSS_REMOTE_DEMO", FolderSetting = "ABYSS_REMOTE_DEMO_DIR", AwaySetting = "ABYSS_REMOTE_DEMO_AWAY";
 
     private static readonly object Drawing = new();
     private static readonly ConcurrentDictionary<(int Monitor, int Width), (long Second, byte[] Jpeg)> Frames = new();
@@ -53,7 +53,10 @@ public sealed class DemoServer
         bool Asked(string name) => File.Exists(InFolder(name));
         foreach (string leftover in new[] { "stop", "new-code", "locked", "no-steam" }) File.Delete(InFolder(leftover));
 
-        await using var server = await TestServer.StartAsync();
+        // ABYSS_REMOTE_DEMO_AWAY=remote.example.test turns away access on for that address; put a
+        // proxy in front that sends X-Forwarded-For (see tests/README.md).
+        string? awayHost = Environment.GetEnvironmentVariable(AwaySetting);
+        await using var server = await TestServer.StartAsync(string.IsNullOrWhiteSpace(awayHost) ? null : awayHost.Trim());
         AddMonitors(server.Desktop, locked: () => Asked("locked"));
         AddPointer(server.Desktop);
         AddGames(server.Steam);

@@ -80,6 +80,7 @@ pressed, Lock, Sleep and Delete included.
 ```
 set ABYSS_REMOTE_DEMO=1
 set ABYSS_REMOTE_DEMO_DIR=C:\some\folder      (optional; default %TEMP%\abyss-remote-demo)
+set ABYSS_REMOTE_DEMO_AWAY=remote.example.test (optional; turns away access on for that address)
 dotnet test tests\AbyssRemote.Tests --filter DemoServer
 ```
 

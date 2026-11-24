@@ -13,9 +13,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="/icon-192.png">
-  <link rel="stylesheet" href="/style.css?v=1.1.0">
-  <link rel="stylesheet" href="/home.css?v=1.1.0">
-  <script type="module" src="/app.js?v=1.1.0"></script>
+  <link rel="stylesheet" href="/style.css?v=1.2.0">
+  <link rel="stylesheet" href="/home.css?v=1.2.0">
+  <script type="module" src="/app.js?v=1.2.0"></script>
 </head>
 <body>
   <!-- The icons, drawn once here. Markup shows one with a "use" element that points at its id,
@@ -69,7 +69,21 @@
           </ol>
           <p>Before you turn on trust, compare the certificate's fingerprint on this device with the one in the Abyss Remote window on the PC. They must be the same.</p>
         </details>
-        <p class="footnote">Only pair devices you control. Never share the code or expose this PC to the internet.</p>
+        <p class="footnote">Only pair devices you control. Never share the code or port-forward this PC.</p>
+      </div>
+    </section>
+    <section id="awayView" class="pair-view hidden">
+      <div class="pair-card">
+        <img class="hero-icon" src="/icon-192.png" alt="" width="64" height="64">
+        <h1>Away from home</h1>
+        <p>This address works from anywhere, but only for devices you added at home. To set this device up, open Abyss Remote on it while you are at home and tap <strong>Set up away access</strong> under <strong>This device</strong>. Then open the link it gives you, or type its code here.</p>
+        <form id="awayForm">
+          <label for="awayCode">Away code</label>
+          <input id="awayCode" type="text" maxlength="16" placeholder="ABCD-EFGH-JKLM" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go" required>
+          <button id="awaySubmit" class="button primary" type="submit">Use this code</button>
+        </form>
+        <div id="awayError" class="error" role="alert"></div>
+        <p class="footnote">New devices can only be added on your home network. A code works once, for 10 minutes.</p>
       </div>
     </section>
     <section id="homeView" class="home hidden" aria-label="Home">
@@ -130,9 +144,21 @@
           </div>
           <div id="devicesPanel" class="hidden">
             <div id="devicesList" class="rows"></div>
-            <p class="quiet">Revoking a device disconnects it at once. Pairings expire after 30 days.</p>
+            <p class="quiet">Revoking a device disconnects it at once, at home and away. Pairings expire after 30 days.</p>
           </div>
           <p id="deviceStatus" class="status-line" role="status"></p>
+          <div id="awayPanel" class="away-panel hidden">
+            <h3>Away from home</h3>
+            <p id="awayState" class="quiet"></p>
+            <div class="button-row">
+              <button id="awaySetup" class="button" type="button">Set up away access</button>
+            </div>
+            <div id="awayHandoff" class="away-handoff hidden">
+              <a id="awayLink" class="button primary" href="/" rel="noopener">Open the away address</a>
+              <p class="quiet">In the Home Screen app, open the away address there and type this code instead: <strong id="awayCodeShown" class="away-code"></strong>. It works once, for 10 minutes.</p>
+            </div>
+            <p id="awayStatus" class="status-line" role="status"></p>
+          </div>
         </section>
       </div>
     </section>
@@ -293,6 +319,6 @@
       </div>
     </div>
   </dialog>
-  <footer>Abyss Remote <span>1.1.0</span></footer>
+  <footer>Abyss Remote <span>1.2.0</span></footer>
 </body>
 </html>

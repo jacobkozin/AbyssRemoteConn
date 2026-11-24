@@ -206,6 +206,9 @@ public sealed class HostRuntime : IAsyncDisposable
             try { _state ??= new StateStore(_env.DataDirectory, _env.Clock); }
             catch (InvalidOperationException ex) { throw new StartProblemException(StartProblemKind.StateFile, ex.Message); }
             int expired = _state.PruneExpired();
+            // Away access off means no device may keep an away key, even if it is turned on again later.
+            var away = options.AwayHost is { } awayHost ? new AwayAccess(awayHost, _env.Clock) : null;
+            int awayKeysRemoved = away is null ? _state.ClearAwayKeys() : 0;
             certificates = _env.Certificates.GetOrCreate(_state, _env.DataDirectory, options.RenewCertificate, options.Lan);
 
             // The names and addresses this PC really answers to (see RequestProtection.KnownHost).
@@ -225,6 +228,7 @@ public sealed class HostRuntime : IAsyncDisposable
                 State = _state,
                 Pairing = _pairing,
                 Protection = new RequestProtection(hosts),
+                Away = away,
                 Sessions = _sessions,
                 Desktop = _env.Desktop,
                 Clipboard = _env.Clipboard,
@@ -246,7 +250,8 @@ public sealed class HostRuntime : IAsyncDisposable
                 ServerFingerprint: certificates.Server.GetCertHashString(HashAlgorithmName.SHA256),
                 RootFingerprint: certificates.Root.GetCertHashString(HashAlgorithmName.SHA256),
                 RootCertificate: certificates.Root.Export(X509ContentType.Cert),
-                RootCertificateFile: Path.Combine(_env.DataDirectory, "AbyssRemote-RootCA.cer"));
+                RootCertificateFile: Path.Combine(_env.DataDirectory, "AbyssRemote-RootCA.cer"),
+                AwayUrl: away?.Url);
             lock (_sync)
             {
                 _app = app;
@@ -259,6 +264,8 @@ public sealed class HostRuntime : IAsyncDisposable
             SetStatus(status);
             if (certificates.Notice is not null) AddNotice(certificates.Notice);
             if (expired > 0) AddNotice($"Removed {expired} device(s) whose 30-day pairing expired.");
+            if (awayKeysRemoved > 0) AddNotice($"Away access is off, so {awayKeysRemoved} device(s) lost their away setup.");
+            if (away is not null) AddNotice($"Away access is on: devices set up for it can use {away.Url}.");
             RefreshDevices();
             _refreshTimer = new System.Threading.Timer(_ => RefreshDevices(), null, RefreshInterval, RefreshInterval);
             return status;
