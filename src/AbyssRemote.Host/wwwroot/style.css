@@ -148,6 +148,15 @@ h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: cl
 .help > :not(summary) { margin: 0 14px 12px; }
 .help ol { padding-left: 20px; color: var(--mist); }
 .help li { margin-bottom: 6px; }
+/* Numbered steps: what to do, in order. Each number stands in a badge, so nobody has to hunt
+   for where a step starts. */
+.steps, .help .steps { display: grid; gap: 14px; padding: 0; list-style: none; counter-reset: step; color: var(--foam); font-size: 15px; line-height: 1.45; }
+.steps { margin: 14px 0 0; }
+.steps li { position: relative; min-height: 28px; margin: 0; padding-left: 40px; counter-increment: step; }
+.steps li::before { content: counter(step); position: absolute; left: 0; top: -3px; width: 28px; height: 28px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-pill); background: var(--aqua); color: var(--abyss); font-size: 14px; font-weight: 900; line-height: 24px; text-align: center; }
+.steps li > span { display: block; }
+.steps li > .button, .steps li > .code-row { margin-top: 10px; }
+.steps a.button { display: inline-flex; margin-bottom: var(--lip); padding: 10px 16px; }
 /* A taller tap area for the link without making its line taller. */
 .help a { display: inline-block; margin: -12px 0; padding: 12px 0; }
 .footnote { margin-bottom: 0; font-size: 13px; }

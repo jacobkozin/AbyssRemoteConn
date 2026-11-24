@@ -17,13 +17,17 @@
 .quiet strong { color: var(--foam); overflow-wrap: anywhere; }
 .status-line { margin: 10px 0 0; font-size: 13px; font-weight: 700; color: var(--mist); }
 .status-line:empty { display: none; }
-/* Away from home (1.2), inside This device */
-.away-panel { margin-top: 14px; padding-top: 12px; border-top: var(--stroke) solid var(--abyss); }
-.away-panel h3 { margin: 0 0 6px; font-size: 15px; font-weight: 900; }
-.away-panel .button-row { margin-top: 10px; }
-.away-handoff { display: grid; gap: 8px; margin-top: 10px; }
-.away-handoff .button { justify-self: start; }
-.away-code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 1px; white-space: nowrap; }
+/* Away from home (1.2). away.js puts this panel first on the home screen, across both
+   columns, while the device still has to be set up, and last in the side column once it is. */
+.home > .away-panel { grid-column: 1 / -1; }
+.away-panel .quiet { font-size: 14px; }
+.away-panel .quiet, .away-handoff { max-width: 70ch; }
+/* Its buttons are wide enough for their words: side by side where there is room, stacked on a phone. */
+.away-panel .button-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); max-width: 520px; margin-top: 14px; }
+.away-handoff .help { margin-top: 16px; }
+/* The code to carry over: big enough to read back, and one tap selects all of it. */
+.code-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.away-code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 18px; letter-spacing: 1px; white-space: nowrap; user-select: all; -webkit-user-select: all; }
 /* A set of buttons shares one width. When they do not fit side by side they stack, and
    still share one width. */
 .button-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }

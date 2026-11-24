@@ -130,8 +130,8 @@ internal sealed class SettingsCard : Card
         height = _away.HeightFor(inner);
         pass.Place(_away, Pad, y, inner, height);
         y += height + Ui.Px(3);
-        string address = TypedAwayHost ?? (_savedAwayHost.Length > 0 ? _savedAwayHost : "the away address");
-        y += pass.Text($"Through the Gaming Hub at https://{address}. Each device is set up once at home; new ones can only be added at home.",
+        // Says what to tap, and where: the set-up itself happens on the device.
+        y += pass.Text("Set each device up once, at home: open Abyss Remote on it and tap “Set up away access”. After that it works from anywhere, at the address below.",
             Ui.Small, Palette.Muted, Pad + indent, y, inner - indent) + Ui.Px(12);
         int awayLabelWidth = Ui.MeasureLine("Away address", Ui.Bold).Width, awayApplyWidth = _awayApply.WidthFor(Ui);
         int awayFieldWidth = Math.Max(Ui.Px(120), inner - awayLabelWidth - Ui.Px(12) - awayApplyWidth - Ui.Px(8));

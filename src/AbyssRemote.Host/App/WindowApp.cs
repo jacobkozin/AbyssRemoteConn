@@ -301,7 +301,8 @@ internal sealed class WindowApp : IWindowActions
         {
             string explanation = $"Devices you have already added will be able to use Abyss Remote from anywhere at https://{_preferences.AwayHost}, "
                 + "through the Gaming Hub on this PC. That address is on the internet: whoever has one of those devices can control this PC "
-                + "from anywhere until you revoke it. Each device is set up once at home, and new devices can still only be added at home.";
+                + "from anywhere until you revoke it. Each device is set up once at home, with “Set up away access” on its Abyss Remote home screen, "
+                + "and new devices can still only be added at home.";
             if (!ConfirmDialog.Ask(_window, "Let added devices connect away from home?", explanation, "Turn on")) return;
         }
         Save(_preferences with { Away = on, AwayExplained = _preferences.AwayExplained || on });

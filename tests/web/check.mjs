@@ -26,7 +26,11 @@ export async function loadModules(...names) {
  *  Returns what the code under test did to it. */
 export function pretendPage({ hash = '', platform = '', touchPoints = 0 } = {}) {
   const page = { elements: {}, replaced: [] };
-  const element = () => ({ value: '', textContent: '', disabled: false, listeners: {}, addEventListener(type, handler) { this.listeners[type] = handler; } });
+  const element = () => ({
+    value: '', textContent: '', disabled: false, listeners: {},
+    classList: { add() {}, remove() {}, toggle() {} },
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+  });
   const define = (name, value) => Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
   define('document', { getElementById: (id) => (page.elements[id] ??= element()) });
   define('location', { hash, pathname: '/' });
@@ -37,9 +41,15 @@ export function pretendPage({ hash = '', platform = '', touchPoints = 0 } = {}) 
 
 let failed = 0;
 
+/** Runs one check. A check that is asynchronous returns its promise: `await check(…)`. */
 export function check(name, fn) {
-  try { fn(); console.log('PASS', name); }
-  catch (error) { failed++; console.log('FAIL', name, '\n     ', String(error.message).split('\n')[0]); }
+  const pass = () => console.log('PASS', name);
+  const fail = (error) => { failed++; console.log('FAIL', name, '\n     ', String(error.message).split('\n')[0]); };
+  try {
+    const result = fn();
+    if (result instanceof Promise) return result.then(pass, fail);
+    pass();
+  } catch (error) { fail(error); }
 }
 
 /** Prints the result line and makes the process fail when a check did. */

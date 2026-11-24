@@ -79,17 +79,39 @@
       <div class="pair-card">
         <img class="hero-icon" src="/icon-192.png" alt="" width="64" height="64">
         <h1>Away from home</h1>
-        <p>This address works from anywhere, but only for devices you added at home. To set this device up, open Abyss Remote on it while you are at home and tap <strong>Set up away access</strong> under <strong>This device</strong>. Then open the link it gives you, or type its code here.</p>
+        <p>This address works from anywhere, for devices you added at home. This device needs an away code first:</p>
+        <ol class="steps">
+          <li>At home, on your Wi-Fi, open Abyss Remote on this device the way you usually do.</li>
+          <li>Tap <strong>Set up away access</strong> on its home screen and follow the steps.</li>
+          <li>If they give you a code, come back here and tap <strong>Paste code</strong>.</li>
+        </ol>
+        <p id="awayIconHint" class="footnote hidden"><strong>Want an icon on your Home Screen?</strong> Add this page to it first (the Share button, then Add to Home Screen) and paste the code in the icon. An icon keeps its own sign-in.</p>
         <form id="awayForm">
           <label for="awayCode">Away code</label>
           <input id="awayCode" type="text" maxlength="16" placeholder="ABCD-EFGH-JKLM" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go" required>
-          <button id="awaySubmit" class="button primary" type="submit">Use this code</button>
+          <div class="button-row">
+            <button id="awayPaste" class="button" type="button">Paste code</button>
+            <button id="awaySubmit" class="button primary" type="submit">Use this code</button>
+          </div>
         </form>
         <div id="awayError" class="error" role="alert"></div>
         <p class="footnote">New devices can only be added on your home network. A code works once, for 10 minutes.</p>
       </div>
     </section>
     <section id="homeView" class="home hidden" aria-label="Home">
+      <!-- Away from home (1.2). away.js fills it in and moves it: first on the home screen
+           while this device still has to be set up, last once it is. -->
+      <section id="awayPanel" class="panel away-panel hidden" aria-labelledby="awayTitle">
+        <h2 id="awayTitle">Away from home</h2>
+        <p id="awayState" class="quiet"></p>
+        <div id="awayHandoff" class="away-handoff hidden"></div>
+        <div id="awayButtons" class="button-row">
+          <button id="awaySetup" class="button primary" type="button">Set up away access</button>
+          <button id="awayLater" class="button" type="button">Not now</button>
+          <button id="awayDone" class="button primary hidden" type="button">Got it</button>
+        </div>
+        <p id="awayStatus" class="status-line" role="status"></p>
+      </section>
       <div class="home-main">
         <section class="panel" aria-labelledby="monitorsTitle">
           <div class="panel-head"><h2 id="monitorsTitle">Monitors</h2><p class="quiet">Choose a monitor to open it.</p></div>
@@ -113,7 +135,7 @@
           <button id="showAllGames" class="button show-all hidden" type="button"></button>
         </section>
       </div>
-      <div class="home-side">
+      <div id="homeSide" class="home-side">
         <section id="filesPanel" class="panel" aria-labelledby="filesTitle">
           <h2 id="filesTitle">Files</h2>
           <div class="drop-zone">
@@ -150,18 +172,6 @@
             <p class="quiet">Revoking a device disconnects it at once, at home and away. Pairings expire after 30 days.</p>
           </div>
           <p id="deviceStatus" class="status-line" role="status"></p>
-          <div id="awayPanel" class="away-panel hidden">
-            <h3>Away from home</h3>
-            <p id="awayState" class="quiet"></p>
-            <div class="button-row">
-              <button id="awaySetup" class="button" type="button">Set up away access</button>
-            </div>
-            <div id="awayHandoff" class="away-handoff hidden">
-              <a id="awayLink" class="button primary" href="/" rel="noopener">Open the away address</a>
-              <p class="quiet">In the Home Screen app, open the away address there and type this code instead: <strong id="awayCodeShown" class="away-code"></strong>. It works once, for 10 minutes.</p>
-            </div>
-            <p id="awayStatus" class="status-line" role="status"></p>
-          </div>
         </section>
       </div>
     </section>

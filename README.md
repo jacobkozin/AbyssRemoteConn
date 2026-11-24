@@ -240,11 +240,19 @@ The proxy must forward to `https://127.0.0.1:8444`, keep the browser's `Host` he
 1. In the window, under Settings, type the away address (for example
    `remote.example.duckdns.org`), click **Apply**, and turn on **Let added devices connect
    away from home**. The first time, it explains what that means and asks you to confirm.
-2. On each phone or tablet, while you are at home: open Abyss Remote on its home address, go
-   to **This device** and tap **Set up away access**, then **Open the away address**. The link
-   carries a one-time code, and the device opens its home screen at the away address.
-3. For the Home Screen app: add the away address to the Home Screen, open it there, and type
-   the code shown under **This device**. A code works once, for 10 minutes.
+2. On each phone, tablet or computer, while it is at home: open Abyss Remote the way you
+   usually do. Until the device is set up, **Use this device away from home** is the first
+   thing on its home screen. Tap **Set up away access**, then **Open the away address**. The
+   link carries a one-time code, and the browser opens its home screen at the away address,
+   set up. From then on, open the away address whenever you are not at home.
+3. An icon on an iPhone's or iPad's Home Screen keeps its own sign-in, so a link cannot set
+   it up. Opened from such an icon, **Set up away access** shows the steps for that instead:
+   copy the code, open the away address in Safari, add that page to the Home Screen, open
+   the new icon and tap **Paste code**. A code works once, for 10 minutes.
+
+The window says the same in short under Settings, and its Devices list shows which devices
+have away access and which do not yet. These steps were tried in a phone-sized Chromium with
+a pretend clipboard and a pretend Home Screen icon, not on a real iPhone.
 
 New devices can only be added at home: the away address refuses pairing, whatever code is
 typed. Revoking a device ends its access at home and away at once. Turning the setting off

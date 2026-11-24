@@ -42,6 +42,24 @@
   window opened with every card in place and no scroll bar.
 - The window lists which devices have away access, and the away address sits under the port
   in Settings.
+- **Setting a device up for away access is spelled out.** It used to be a small button at the
+  end of the home screen, and the window did not say what to do.
+  - Until a device is set up, **Use this device away from home** is the first panel on its
+    home screen, with **Set up away access** and numbered steps. "Not now" moves it to the
+    end, where it stays available.
+  - A browser gets one button, **Open the away address**, and is set up when that page
+    opens. An icon on an iPhone's or iPad's Home Screen cannot use a link, so it gets the
+    steps for an icon of the away address, with **Copy code** and **Copy address**, and the
+    away screen has **Paste code**.
+  - Once the code is accepted, the page says what comes next: bookmark it, or use this icon.
+  - The away screen lists the three steps that lead to a code, and on an iPhone or iPad it
+    says to make the icon before using the code.
+  - In the window, Settings say what to tap on the device, and Devices shows "away access"
+    or "no away access yet" for each one.
+  Who may connect did not change: a code is still made only by a paired device at home.
+  Tried in Chromium at phone size and at 1280 px against the demo server, through a stand-in
+  for the proxy, with a pretend clipboard and a pretend Home Screen icon. Not on a real
+  iPhone.
 - Requests that carry proxy headers (`X-Forwarded-For`, `Forwarded`) for any name other than
   the away address are refused with 421.
 - The demo server takes `ABYSS_REMOTE_DEMO_AWAY=<address>` to try the away screens behind a

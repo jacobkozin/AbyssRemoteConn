@@ -1,7 +1,7 @@
 namespace AbyssRemote.Host.App;
 
 /// <summary>The paired devices: name, when it was paired and last seen, a green dot while it
-/// is connected, and a way to take its access away.</summary>
+/// is connected, whether it is set up for away access, and a way to take its access away.</summary>
 internal sealed class DevicesCard : Card
 {
     private readonly RaisedButton _revokeAll;
@@ -10,6 +10,7 @@ internal sealed class DevicesCard : Card
     private IReadOnlySet<string> _connected = new HashSet<string>();
     private string _shown = "";
     private DateTimeOffset _now;
+    private bool _awayOn;
 
     public DevicesCard(IWindowActions actions) : base("Devices", actions)
     {
@@ -18,10 +19,11 @@ internal sealed class DevicesCard : Card
     }
 
     /// <summary>Returns true when the number of rows changed, so the window lays itself out again.</summary>
-    public bool Show(IReadOnlyList<PairedDevice> devices, IReadOnlySet<string> connected, DateTimeOffset now)
+    /// <param name="awayOn">Away access is on, so each row says whether its device is set up for it.</param>
+    public bool Show(IReadOnlyList<PairedDevice> devices, IReadOnlySet<string> connected, DateTimeOffset now, bool awayOn = false)
     {
         bool rowsChanged = devices.Count != _devices.Count;
-        (_devices, _connected, _now) = (devices, connected, now);
+        (_devices, _connected, _now, _awayOn) = (devices, connected, now, awayOn);
 
         // One "Revoke" button per row; each remembers its device.
         while (_revokeButtons.Count < devices.Count)
@@ -46,10 +48,11 @@ internal sealed class DevicesCard : Card
         return rowsChanged;
     }
 
+    // The away part comes before "paired": where the line is cut off, the least important goes.
     private string Detail(PairedDevice device) =>
         (_connected.Contains(device.Id) ? "Connected now" : $"Last seen {RelativeTime.Ago(device.LastSeenUtc, _now)}")
-        + $"  ·  paired {RelativeTime.Ago(device.CreatedUtc, _now)}"
-        + (device.Away ? "  ·  away access" : "");
+        + (device.Away ? "  ·  away access" : _awayOn ? "  ·  no away access yet" : "")
+        + $"  ·  paired {RelativeTime.Ago(device.CreatedUtc, _now)}";
 
     protected override int Compose(Pass pass, int width)
     {

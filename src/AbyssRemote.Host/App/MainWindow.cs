@@ -55,7 +55,7 @@ internal sealed class MainView : Control
         _header.Show(state.Status);
         _problem.Show(state.Status.Problem);
         _connect.Show(state.Status, state.Code, state.Now);
-        _devices.Show(state.Devices, state.ConnectedDeviceIds, state.Now);
+        _devices.Show(state.Devices, state.ConnectedDeviceIds, state.Now, awayOn: state.Status.Running?.AwayUrl is not null);
         _setup.Show(state.Setup, state.Status);
         _settings.Show(state.Status, state.StartWithWindows, state.CloseToTray, state.AwayHost);
         _activity.Show(state.Notices);
