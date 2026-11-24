@@ -200,6 +200,20 @@ internal sealed class WindowApp : IWindowActions
         catch (ExternalException) { _runtime.AddNotice("The clipboard is busy. Copy the address again in a moment."); }
     }
 
+    /// <summary>"Show away code": makes the code that adds a device at the away address and
+    /// shows it in a box of its own. Whoever sees that code can use it once from anywhere, so
+    /// it is only on screen while the box is open, and a code nobody used dies with the box.</summary>
+    public void ShowAwayCode()
+    {
+        if (_runtime.NewAwayCode() is not { } offer)
+        {
+            _runtime.AddNotice("There is no away code right now: Abyss Remote is not running with away access turned on.");
+            return;
+        }
+        AwayCodeDialog.Show(_window, _runtime, offer);
+        _runtime.CancelAwayCode();
+    }
+
     public void RevokeDevice(PairedDevice device) => _runtime.RevokeDevice(device.Id);
 
     public void RevokeAllDevices()
@@ -301,8 +315,8 @@ internal sealed class WindowApp : IWindowActions
         {
             string explanation = $"Devices you have already added will be able to use Abyss Remote from anywhere at https://{_preferences.AwayHost}, "
                 + "through the Gaming Hub on this PC. That address is on the internet: whoever has one of those devices can control this PC "
-                + "from anywhere until you revoke it. Each device is set up once at home, with “Set up away access” on its Abyss Remote home screen, "
-                + "and new devices can still only be added at home.";
+                + "from anywhere until you revoke it. A device is added there with an away code, which this window only shows when you click "
+                + "“Show away code”. Whoever sees that code can use it once, so keep it to yourself.";
             if (!ConfirmDialog.Ask(_window, "Let added devices connect away from home?", explanation, "Turn on")) return;
         }
         Save(_preferences with { Away = on, AwayExplained = _preferences.AwayExplained || on });

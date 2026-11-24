@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { check, finish, loadModules, pretendPage } from './check.mjs';
 
-const [{ normalizeAwayCode, awayCodeFromHash, formatAwayCode, takeAwayCodeFromAddress, initAwayView, awayPanelView, hostOf, isHomeScreenIcon, isIphoneOrIpad, CODE_LENGTH }] = await loadModules('away.js');
+const [{ normalizeAwayCode, awayCodeFromHash, awayPairCodeFromHash, formatAwayCode, takeAwayCodeFromAddress, initAwayView, goAway, awayPanelView, hostOf, isHomeScreenIcon, isIphoneOrIpad, CODE_LENGTH }] = await loadModules('away.js');
 
 check('a code is twelve letters and digits from the PC\'s alphabet, typed any way', () => {
   assert.equal(CODE_LENGTH, 12);
@@ -53,31 +53,53 @@ check('the form explains a code that cannot be right instead of sending it', () 
   assert.match(page.elements.awayError.textContent, /12 letters and digits/);
 });
 
-/** The pretend page with a clipboard holding `text`, and a PC that counts what it is sent. */
-function pageWithClipboard(text) {
-  const page = pretendPage();
-  navigator.clipboard = { readText: async () => text };
+/** A pretend page at the away address, and a PC that records what it is sent and answers `reply`. */
+function pageAndPc({ hash = '', reply = {} } = {}) {
+  const page = pretendPage({ hash, platform: 'iPhone', touchPoints: 5 });
   page.sent = [];
-  globalThis.fetch = async (url, options) => { page.sent.push(JSON.parse(options.body)); return { ok: true, status: 200, json: async () => ({}) }; };
+  globalThis.fetch = async (url, options) => { page.sent.push([url, JSON.parse(options.body ?? 'null')]); return { ok: true, status: 200, json: async () => reply }; };
   return page;
 }
 
-await check('"Paste code" takes a copied code, however it was copied, and uses it at once', async () => {
-  const page = pageWithClipboard(' abcd-efgh-jklm\n');
+await check('a name and the away code from the PC add this device', async () => {
+  const page = pageAndPc();
   let ready = 0;
   initAwayView({ onReady() { ready++; } });
-  await page.elements.awayPaste.listeners.click();
-  assert.deepEqual(page.sent, [{ code: 'ABCDEFGHJKLM' }]);
+  assert.equal(page.elements.awayName.value, 'My iPhone', 'a first suggestion for the name');
+  document.getElementById('awayCode').value = 'abcd-efgh-jklm';
+  await page.elements.awayForm.listeners.submit({ preventDefault() {} });
+  assert.deepEqual(page.sent, [['/api/v1/pair', { code: 'ABCDEFGHJKLM', label: 'My iPhone' }]]);
   assert.equal(ready, 1);
   assert.equal(page.elements.awayError.textContent, '');
 });
 
-await check('"Paste code" with something else on the clipboard sends nothing and says what to do', async () => {
-  const page = pageWithClipboard('https://example.org/some/other/thing');
+check('the pairing code typed at the away address is explained, not sent', () => {
+  const page = pageAndPc();
   initAwayView({ onReady() {} });
-  await page.elements.awayPaste.listeners.click();
+  document.getElementById('awayCode').value = ' 12345678 ';
+  page.elements.awayForm.listeners.submit({ preventDefault() {} });
   assert.deepEqual(page.sent, []);
-  assert.match(page.elements.awayError.textContent, /Copy it in Abyss Remote at home/);
+  assert.match(page.elements.awayError.textContent, /pairing code, which is for home/);
+  assert.match(page.elements.awayError.textContent, /Show away code/);
+});
+
+check('the QR code in the PC\'s box fills in the code and leaves the address bar', () => {
+  assert.equal(awayPairCodeFromHash('#pair=ABCDEFGHJKLM'), 'ABCDEFGHJKLM');
+  assert.equal(awayPairCodeFromHash('#pair=12345678'), '', 'eight digits are a pairing code, for home');
+  assert.equal(awayPairCodeFromHash('#away=ABCDEFGHJKLM'), '');
+  const page = pageAndPc({ hash: '#pair=ABCDEFGHJKLM' });
+  initAwayView({ onReady() {} });
+  assert.equal(page.elements.awayCode.value, 'ABCD-EFGH-JKLM');
+  assert.deepEqual(page.replaced, [[null, '', '/']]);
+});
+
+await check('a paired browser at home takes itself to the away address with a code of its own', async () => {
+  const page = pageAndPc({ reply: { url: 'https://remote.example.org/#away=ABCDEFGHJKLM' } });
+  const went = [];
+  location.assign = (url) => went.push(url);
+  await goAway();
+  assert.deepEqual(page.sent, [['/api/v1/away/code', null]]);
+  assert.deepEqual(went, ['https://remote.example.org/#away=ABCDEFGHJKLM']);
 });
 
 check('the address is shown the way a person types it', () => {
@@ -110,42 +132,53 @@ check('the panel stays away while the PC has away access turned off', () => {
   assert.deepEqual(awayPanelView({ available: false, url: null, here: false, ready: false }), { visible: false });
 });
 
-check('a device that is not set up gets the panel first on the home screen, with one thing to tap', () => {
+check('a browser paired at home gets one button, first on its home screen', () => {
   const view = awayPanelView(home());
   assert.equal(view.top, true);
-  assert.equal(view.setup, 'Set up away access');
+  assert.equal(view.setup, true);
   assert.equal(view.later, true);
+  assert.equal(view.copy, undefined);
+  assert.match(text(view), /One tap/);
   assert.match(text(view), /remote\.example\.org/);
-  assert.match(text(view), /while you are at home/);
 });
 
-check('"Not now" moves the panel to the end, where it still offers the set-up', () => {
+check('"Not now" moves the panel to the end, where the button stays', () => {
   const view = awayPanelView(home(), { later: true });
   assert.equal(view.top, false);
-  assert.equal(view.setup, 'Set up away access');
+  assert.equal(view.setup, true);
   assert.equal(view.later, false);
 });
 
-check('a device that is set up is told which address to open, and can be set up again', () => {
-  const view = awayPanelView(home({ ready: true }));
-  assert.equal(view.top, false);
-  assert.equal(view.setup, 'Set up again');
-  assert.match(text(view), /open remote\.example\.org/);
+check('an icon on an iPhone cannot take itself away, so it is told where to make one that can', () => {
+  const view = awayPanelView(home(), { icon: true, apple: true });
+  assert.equal(view.setup, undefined, 'no button that would open a sheet inside the icon');
+  assert.equal(view.copy, true);
+  assert.match(text(view), /This icon only works at home/);
+  assert.match(text(view), /Show away code/);
 });
 
-check('right after the code was accepted, the page says what to do next, once', () => {
+check('once away access is on, the panel names the address and offers to open it', () => {
+  const view = awayPanelView(home({ ready: true }));
+  assert.equal(view.top, false);
+  assert.equal(view.setup, undefined);
+  assert.equal(view.open, true);
+  assert.equal(awayPanelView(home({ ready: true }), { icon: true }).open, false);
+});
+
+check('right after signing in at the away address, the page says to use that address, once', () => {
   const there = home({ here: true, ready: true });
   const fresh = awayPanelView(there, { justSetUp: true });
   assert.equal(fresh.top, true);
   assert.equal(fresh.done, true);
-  assert.equal(fresh.setup, undefined, 'nothing can be set up at the away address');
-  assert.match(text(fresh), /bookmarks/);
-  assert.match(text(awayPanelView(there, { justSetUp: true, icon: true })), /Use this icon/);
+  assert.match(text(fresh), /Use this address from now on: remote\.example\.org/);
+  assert.doesNotMatch(text(fresh), /away code of its own/);
+  assert.match(text(awayPanelView(there, { justSetUp: true, apple: true })), /an icon on the Home Screen asks for an away code of its own/);
+  assert.match(text(awayPanelView(there, { justSetUp: true, icon: true, apple: true })), /Use this icon wherever you are/);
 
   const later = awayPanelView(there);
   assert.equal(later.top, false);
   assert.equal(later.done, undefined);
-  assert.match(text(later), /connected away from home/);
+  assert.match(text(later), /works at home and away/);
 });
 
 finish('away');

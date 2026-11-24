@@ -5,11 +5,11 @@
 - **Away from home.** A new setting, "Let added devices connect away from home", with an away
   address such as `remote.example.duckdns.org`. A reverse proxy on the same PC (on the
   development PC, the Gaming Hub's Caddy) forwards that public HTTPS address to Abyss Remote
-  over loopback. Only devices paired at home can use it. Each one asks for a one-time away
-  code under This device while at home, and the code, or the link that carries it, gives that
-  browser a separate away key. Pairing and the root certificate are refused at the away
-  address. Revoking a device ends both keys, and turning the setting off forgets every away
-  key. See [Security](docs/SECURITY.md#what-12-added).
+  over loopback. That address works at home too. A device gets onto it with a one-time away
+  code that the window shows on request, or by bringing a code of its own from home, and has
+  a separate away key there. The pairing code and the root certificate are refused at the
+  away address. Revoking a device ends both keys, and turning the setting off forgets every
+  away key. See [Security](docs/SECURITY.md#what-12-added).
 - **A new look for the browser client: the Abyss game style.** Ocean-coloured panels with one
   dark outline and a lip under everything that can be pressed; teal for the main action and
   for anything switched on, coral for what cannot be undone. Fixed along the way, on phones:
@@ -42,24 +42,24 @@
   window opened with every card in place and no scroll bar.
 - The window lists which devices have away access, and the away address sits under the port
   in Settings.
-- **Setting a device up for away access is spelled out.** It used to be a small button at the
-  end of the home screen, and the window did not say what to do.
-  - Until a device is set up, **Use this device away from home** is the first panel on its
-    home screen, with **Set up away access** and numbered steps. "Not now" moves it to the
-    end, where it stays available.
-  - A browser gets one button, **Open the away address**, and is set up when that page
-    opens. An icon on an iPhone's or iPad's Home Screen cannot use a link, so it gets the
-    steps for an icon of the away address, with **Copy code** and **Copy address**, and the
-    away screen has **Paste code**.
-  - Once the code is accepted, the page says what comes next: bookmark it, or use this icon.
-  - The away screen lists the three steps that lead to a code, and on an iPhone or iPad it
-    says to make the icon before using the code.
-  - In the window, Settings say what to tap on the device, and Devices shows "away access"
-    or "no away access yet" for each one.
-  Who may connect did not change: a code is still made only by a paired device at home.
+- **Adding a device for away access is one address and one code.** The first version made a
+  device set itself up from home in several steps, and nobody could tell what to click.
+  - The window has **Show away code** under Connect. A box shows the away address, a QR code
+    and a one-time code, for 10 minutes; closing it cancels a code nobody used.
+  - At the away address a device types a name and that code, and is added. The address works
+    at home too, so the device needs no other, and no certificate.
+  - The pairing screen at home has a switch, **Also use this device away from home**. With
+    it on, the browser goes on to the away address after pairing and is signed in there too.
+    A browser that is already paired has the same as one button on its home screen.
+  - An icon on an iPhone's or iPad's Home Screen keeps its own sign-in and cannot be sent to
+    another address, so it is told to make an icon from the away address and type the code
+    there.
+  - In the window, Devices shows "away access" or "no away access yet" for each device.
+  This changes who can add a device: an away code from the window adds one from anywhere,
+  once, for whoever sees it while it is valid. The pairing code still never works at the away
+  address. See [Security](docs/SECURITY.md#what-12-added).
   Tried in Chromium at phone size and at 1280 px against the demo server, through a stand-in
-  for the proxy, with a pretend clipboard and a pretend Home Screen icon. Not on a real
-  iPhone.
+  for the proxy and with a pretend Home Screen icon. Not on a real phone.
 - Requests that carry proxy headers (`X-Forwarded-For`, `Forwarded`) for any name other than
   the away address are refused with 421.
 - The demo server takes `ABYSS_REMOTE_DEMO_AWAY=<address>` to try the away screens behind a

@@ -19,8 +19,9 @@ cookies, certificates, logs or network addresses.
 Defended against:
 
 - **Anyone on the internet, while away access is on (1.2).** They can only reach the away
-  address through your reverse proxy. It never pairs a device and only lets in a device's
-  away key, which only a device paired at home can get.
+  address through your reverse proxy. It only lets in a device's away key. A device gets one
+  with a one-time away code that the window shows on request, or by bringing a code of its
+  own from home; the pairing code never works there.
 
 - **Other devices on the same network** that try to pair, guess codes, or use the API without
   a session.
@@ -75,16 +76,30 @@ is and is not exposed. Away access is off by default.
   (`X-Forwarded-For` or `Forwarded`), and the connection comes from loopback. The away
   address without them, and proxy headers with any other name, get 421, so an away request
   can never pass as a home one. Away requests get `Strict-Transport-Security`.
-- **Nothing is added away.** The away address refuses `POST /api/v1/pair` (even with a valid
-  code, which stays usable at home) and the root-certificate download.
-- **A separate key per device.** At home, a paired device asks for a one-time away code for
-  itself. Redeeming it at the away address gives that browser a second secret, stored as a
-  hash next to the home one. A home key never works away and an away key never works at
-  home, so a cookie copied off a device at home is no use from the internet.
-- **The codes.** Twelve characters from 32 (2^60 possibilities), one per device, valid ten
-  minutes, single use, compared in constant time. Twenty wrong tries in total destroy every
-  open code. The code travels in the URL fragment, so it is never in a request line or a
-  proxy log.
+- **The pairing code never works there.** The away address refuses the eight-digit pairing
+  code, which stays usable at home, and the root-certificate download. Typing the pairing
+  code there is explained and not counted as a wrong guess.
+- **A device is added there with an away code from the window.** "Show away code" makes one
+  and shows it in a box of its own, with the address and a QR code. Typed at the away address
+  together with a name, it adds a new device. This is the one way a device gets in without
+  ever having been on the home network, so the code is handled with care: it is on screen
+  only while that box is open, closing the box cancels a code nobody used, and its use is
+  written to the activity list with the device's address and announced by the tray icon.
+  **Whoever sees the code while it is valid can use it, once, from anywhere.** Do not open
+  the box while the screen is shared, streamed or watched.
+- **A device paired at home can take itself there.** It asks for a one-time code for itself
+  (from home only, with its cookie, Origin and CSRF token) and opens the away address with
+  it. That is the switch "Also use this device away from home" on the pairing screen and the
+  button on the home screen. A code from the window cannot be used through that link.
+- **A separate key per device.** Either way the browser at the away address gets an away
+  key, stored as a hash next to the home one. A home key never works away and an away key
+  never works at home, so a cookie copied off a device at home is no use from the internet.
+  A device added with the window's code has no usable home key.
+- **The codes.** Twelve characters from 32 (2^60 possibilities), valid ten minutes, single
+  use, compared in constant time. The window has one open code at a time, and so has each
+  device. Twenty wrong tries in total destroy every open code. A code travels in the URL
+  fragment (the QR code, the hand-over link), so it is never in a request line or a proxy
+  log.
 - **Taking it back.** Revoking a device or signing it out ends both keys and closes its
   sockets. Turning the setting off clears every away key on the next start, so devices have
   to be set up again after it is turned back on.

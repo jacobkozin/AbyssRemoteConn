@@ -19,9 +19,9 @@ two ways to stream:
 Everything runs on your PC: no account, no cloud relay, no telemetry, no third-party code.
 
 > **Security warning:** this is for trusted private networks. Never port-forward it. Away from
-> home only works through your own HTTPS reverse proxy on the same PC, and only for devices you
-> added at home. Read [Security](docs/SECURITY.md) before turning on home-network mode or away
-> access.
+> home only works through your own HTTPS reverse proxy on the same PC, and a device gets onto
+> that address only with a one-time away code from the window, or from home. Read
+> [Security](docs/SECURITY.md) before turning on home-network mode or away access.
 
 ## Status
 
@@ -240,23 +240,31 @@ The proxy must forward to `https://127.0.0.1:8444`, keep the browser's `Host` he
 1. In the window, under Settings, type the away address (for example
    `remote.example.duckdns.org`), click **Apply**, and turn on **Let added devices connect
    away from home**. The first time, it explains what that means and asks you to confirm.
-2. On each phone, tablet or computer, while it is at home: open Abyss Remote the way you
-   usually do. Until the device is set up, **Use this device away from home** is the first
-   thing on its home screen. Tap **Set up away access**, then **Open the away address**. The
-   link carries a one-time code, and the browser opens its home screen at the away address,
-   set up. From then on, open the away address whenever you are not at home.
-3. An icon on an iPhone's or iPad's Home Screen keeps its own sign-in, so a link cannot set
-   it up. Opened from such an icon, **Set up away access** shows the steps for that instead:
-   copy the code, open the away address in Safari, add that page to the Home Screen, open
-   the new icon and tap **Paste code**. A code works once, for 10 minutes.
+2. In the window, under Connect, click **Show away code**. A box shows the away address, a
+   QR code and a one-time code. It works once, for 10 minutes, and closing the box cancels
+   it.
+3. On the phone, tablet or computer: open the away address (or scan the QR code with the
+   camera), give the device a name, type the code and tap **Add this device**. That is all.
+   The away address works at home too, so the device needs no other address, and it needs
+   no certificate.
 
-The window says the same in short under Settings, and its Devices list shows which devices
-have away access and which do not yet. These steps were tried in a phone-sized Chromium with
-a pretend clipboard and a pretend Home Screen icon, not on a real iPhone.
+On an iPhone or iPad, an icon on the Home Screen keeps its own sign-in. Make the icon first
+(open the away address in Safari, then Share and Add to Home Screen) and type the code in the
+icon.
 
-New devices can only be added at home: the away address refuses pairing, whatever code is
-typed. Revoking a device ends its access at home and away at once. Turning the setting off
-forgets every away setup, so each device has to be set up again.
+A device that pairs at home in the usual way can switch on **Also use this device away from
+home** on the pairing screen. After pairing, the browser goes on to the away address by
+itself and is signed in there too. A browser that is already paired at home has the same as
+a button on its home screen, **Turn on away access**.
+
+The pairing code never works at the away address. Whoever sees an away code while it is valid
+can use it, once, from anywhere, so do not open that box while your screen is shared or
+streamed. Revoking a device ends its access at home and away at once, and turning the setting
+off signs every device out of the away address. The window's Devices list shows which
+devices have away access.
+
+All of this was tried in a phone-sized Chromium against the demo server, through a stand-in
+for the proxy. It has not been tried on a real phone yet.
 
 ### Game mode
 
@@ -358,8 +366,9 @@ needs that cookie, the exact Origin and a per-device CSRF token. Revoking a devi
 it immediately. File transfer is limited to one folder, the PC actions are a fixed list of
 two, and a Steam game can only be started by the number of an installed game. Away access
 (1.2) is off by default; when it is on, only requests through a proxy on this PC for the away
-address count as away, nothing can be paired there, and each device needs a separate away key
-that only a device paired at home can get. Details, the
+address count as away, the pairing code never works there, and a device gets its separate
+away key only with a one-time away code that the window shows on request, or by bringing a
+code of its own from home. Details, the
 R3.3 issues fixed in 1.0, what 1.1 added and the known limits are in
 [docs/SECURITY.md](docs/SECURITY.md).
 

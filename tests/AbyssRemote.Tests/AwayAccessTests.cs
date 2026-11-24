@@ -71,8 +71,9 @@ public sealed class AwayClient : IDisposable
     public void Dispose() => Http.Dispose();
 }
 
-/// <summary>Away from home (1.2): only already paired devices, set up at home, can use the away
-/// address, and only through the proxy on this PC.</summary>
+/// <summary>Away from home (1.2): the away address only works through the proxy on this PC. A
+/// device gets onto it with an away code that the window shows on request, or by bringing a
+/// code of its own from home. The pairing code never works there.</summary>
 [TestClass]
 public sealed class AwayAccessTests
 {
@@ -144,21 +145,111 @@ public sealed class AwayAccessTests
     }
 
     [TestMethod]
-    public async Task NothingCanBePairedAtTheAwayAddressEvenWithTheRightCode()
+    public async Task ThePairingCodeNeverWorksAtTheAwayAddress()
     {
         await using var server = await TestServer.StartAsync(AwayClient.Host);
         string pin = server.Pairing.Rotate();
+        var (awayCode, _) = server.Away!.Codes.Issue(AwayCodes.NewDevice);
         using var away = new AwayClient(server);
-        using var reply = await away.PostJsonAsync("/api/v1/pair", new { code = pin, label = "Stranger" });
-        Assert.AreEqual(HttpStatusCode.Forbidden, reply.StatusCode);
-        StringAssert.Contains((await reply.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString(), "home network");
+        // More tries than the number of wrong away codes that would destroy every open code:
+        // typing the other code is a mistake, not a guess, and is not counted as one.
+        for (int i = 0; i <= AwayCodes.MaxFailures; i++)
+        {
+            using var reply = await away.PostJsonAsync("/api/v1/pair", new { code = pin, label = "Stranger" });
+            Assert.AreEqual(HttpStatusCode.BadRequest, reply.StatusCode);
+            StringAssert.Contains((await reply.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString(), "not an away code");
+        }
         Assert.IsNull(away.SessionCookie);
         Assert.AreEqual(0, server.State.Devices().Count);
+        Assert.IsTrue(server.Away.Codes.IsOpen(AwayCodes.NewDevice), "the window's away code is still good");
 
-        // The code was not used up: the same code still pairs at home.
+        // Neither code was used up: the pairing code pairs at home, the away code adds a device away.
         using var home = server.CreateClient();
         using var paired = await home.PostJsonAsync("/api/v1/pair", new { code = pin, label = "Phone at home" });
         Assert.AreEqual(HttpStatusCode.OK, paired.StatusCode);
+        using var added = await away.PostJsonAsync("/api/v1/pair", new { code = awayCode, label = "Phone on the train" });
+        Assert.AreEqual(HttpStatusCode.OK, added.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task ADeviceIsAddedAtTheAwayAddressWithTheWindowsAwayCode()
+    {
+        await using var server = await TestServer.StartAsync(AwayClient.Host);
+        var (code, _) = server.Away!.Codes.Issue(AwayCodes.NewDevice);
+        string typed = AwayCodes.Format(code).ToLowerInvariant(); // as a person types it: small letters, with the dashes
+
+        using var phone = new AwayClient(server);
+        using var added = await phone.PostJsonAsync("/api/v1/pair", new { code = typed, label = "  Kitchen tablet  " });
+        Assert.AreEqual(HttpStatusCode.OK, added.StatusCode);
+        Assert.AreEqual("Kitchen tablet", (await added.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("name").GetString());
+        var cookie = phone.SessionCookie!;
+        Assert.IsTrue(cookie.HttpOnly && cookie.Secure, "same cookie rules as at home");
+        Assert.IsTrue(server.Notices.Any(n => n.Contains("Added a new device with an away code") && n.Contains("Kitchen tablet") && n.Contains("203.0.113.50")));
+        Assert.IsFalse(server.Notices.Any(n => n.Contains(code)), "the code is not written to the activity list");
+
+        // It is a device like any other, signed in at the away address.
+        using var me = await phone.Http.GetAsync("/api/v1/me");
+        Assert.AreEqual(HttpStatusCode.OK, me.StatusCode);
+        var body = await me.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.AreEqual("Kitchen tablet", body.GetProperty("device").GetString());
+        Assert.IsTrue(body.GetProperty("away").GetProperty("here").GetBoolean());
+        Assert.IsTrue(body.GetProperty("away").GetProperty("ready").GetBoolean());
+        Assert.AreEqual(1, server.State.Devices().Count);
+
+        // Its key is an away key: it does not open the home address.
+        Assert.IsNull(server.State.Authenticate(cookie.Value), "not a home key");
+        Assert.IsNotNull(server.State.Authenticate(cookie.Value, away: true));
+
+        // The code is used up.
+        using var other = new AwayClient(server);
+        using var again = await other.PostJsonAsync("/api/v1/pair", new { code, label = "Someone else" });
+        Assert.AreEqual(HttpStatusCode.BadRequest, again.StatusCode);
+        Assert.IsNull(other.SessionCookie);
+        Assert.AreEqual(1, server.State.Devices().Count);
+    }
+
+    [TestMethod]
+    public async Task AddingADeviceNeedsANameAndDoesNotWasteTheCodeWithoutOne()
+    {
+        await using var server = await TestServer.StartAsync(AwayClient.Host);
+        var (code, _) = server.Away!.Codes.Issue(AwayCodes.NewDevice);
+        using var phone = new AwayClient(server);
+
+        using var nameless = await phone.PostJsonAsync("/api/v1/pair", new { code, label = "   " });
+        Assert.AreEqual(HttpStatusCode.BadRequest, nameless.StatusCode);
+        Assert.AreEqual(0, server.State.Devices().Count);
+        using var forged = await phone.PostJsonAsync("/api/v1/pair", new { code, label = "Phone" }, origin: "https://evil.example");
+        Assert.AreEqual(HttpStatusCode.Forbidden, forged.StatusCode, "another site cannot add a device");
+
+        using var named = await phone.PostJsonAsync("/api/v1/pair", new { code, label = "Phone" });
+        Assert.AreEqual(HttpStatusCode.OK, named.StatusCode, "the code was still good");
+    }
+
+    [TestMethod]
+    public async Task TheWindowsAwayCodeAddsNothingThroughTheHandOverLink()
+    {
+        // The link a paired device brings from home carries no name, so it cannot add a device.
+        await using var server = await TestServer.StartAsync(AwayClient.Host);
+        var (code, _) = server.Away!.Codes.Issue(AwayCodes.NewDevice);
+        using var browser = new AwayClient(server);
+        using var reply = await browser.RedeemAsync(code);
+        Assert.AreEqual(HttpStatusCode.BadRequest, reply.StatusCode);
+        Assert.IsNull(browser.SessionCookie);
+        Assert.AreEqual(0, server.State.Devices().Count);
+    }
+
+    [TestMethod]
+    public async Task TheInfoSaysWhetherThePcOffersAnAwayAddress()
+    {
+        await using var with = await TestServer.StartAsync(AwayClient.Host);
+        using var home = with.CreateClient();
+        var info = await home.Http.GetFromJsonAsync<JsonElement>("/api/v1/info");
+        Assert.IsTrue(info.GetProperty("awayAvailable").GetBoolean());
+        Assert.IsFalse(info.GetProperty("away").GetBoolean(), "this request came from home");
+
+        await using var without = await TestServer.StartAsync();
+        using var plain = without.CreateClient();
+        Assert.IsFalse((await plain.Http.GetFromJsonAsync<JsonElement>("/api/v1/info")).GetProperty("awayAvailable").GetBoolean());
     }
 
     [TestMethod]
@@ -379,6 +470,34 @@ public sealed class AwayPartsTests
     }
 
     [TestMethod]
+    public void TheWindowsCodeCanBeTakenBackAndIsReplacedByANewerOne()
+    {
+        var codes = new AwayCodes();
+        Assert.IsFalse(codes.IsOpen(AwayCodes.NewDevice));
+        var (first, _) = codes.Issue(AwayCodes.NewDevice);
+        var (ofADevice, _) = codes.Issue("device-1");
+        Assert.IsTrue(codes.IsOpen(AwayCodes.NewDevice));
+
+        var (second, _) = codes.Issue(AwayCodes.NewDevice);
+        Assert.AreEqual(AwayCodeResult.WrongOrExpired, codes.TryUse(first).Result, "a newer code replaces the older one");
+
+        Assert.IsTrue(codes.Cancel(AwayCodes.NewDevice));
+        Assert.IsFalse(codes.IsOpen(AwayCodes.NewDevice));
+        Assert.AreEqual(AwayCodeResult.WrongOrExpired, codes.TryUse(second).Result, "taken back");
+        Assert.IsFalse(codes.Cancel(AwayCodes.NewDevice), "nothing left to take back");
+        Assert.AreEqual((AwayCodeResult.Accepted, "device-1"), codes.TryUse(ofADevice), "a device's own code is not touched");
+    }
+
+    [TestMethod]
+    public void OnlyTwelveLettersAndDigitsLookLikeAnAwayCode()
+    {
+        Assert.IsTrue(AwayCodes.LooksLikeCode("ABCDEFGHJKLM"));
+        Assert.IsTrue(AwayCodes.LooksLikeCode(" abcd-efgh-jklm "));
+        foreach (string? text in new[] { "12345678", "1234 5678", "ABCD-EFGH-JKL", "ABCD-EFGH-JKLMN", "ABCD-EFGH-JKL0", "", null })
+            Assert.IsFalse(AwayCodes.LooksLikeCode(text), text ?? "(nothing)");
+    }
+
+    [TestMethod]
     public void CodesUseTheUnambiguousAlphabet()
     {
         var codes = new AwayCodes();
@@ -443,6 +562,57 @@ public sealed class AwayPartsTests
         Assert.IsTrue(host.Runtime.Devices.Single(d => d.Name == "Phone").Away);
         Assert.IsFalse(host.Runtime.Devices.Single(d => d.Name == "Laptop").Away);
         Assert.IsTrue(host.Runtime.Notices.Any(n => n.Message.Contains("Away access is on")));
+    }
+
+    [TestMethod]
+    public async Task TheWindowShowsAnAwayCodeOnlyWhileAwayAccessIsOnAndCanTakeItBack()
+    {
+        await using var host = new TestRuntime();
+        Assert.IsNull(host.Runtime.NewAwayCode(), "not running yet");
+        await host.Runtime.StartAsync(TestRuntime.AnyFreePort); // away access off
+        Assert.IsNull(host.Runtime.NewAwayCode());
+        Assert.IsFalse(host.Runtime.AwayCodeOpen);
+
+        await host.Runtime.RestartAsync(TestRuntime.AnyFreePort with { AwayHost = AwayClient.Host });
+        var offer = host.Runtime.NewAwayCode()!;
+        StringAssert.Matches(offer.Code, new System.Text.RegularExpressions.Regex("^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$"));
+        Assert.AreEqual(AwayClient.Origin, offer.Address);
+        Assert.AreEqual($"{AwayClient.Origin}/#pair={offer.Code.Replace("-", "")}", offer.Url, "the QR code carries the code in the fragment");
+        Assert.IsTrue(host.Runtime.AwayCodeOpen);
+        Assert.IsTrue(host.Runtime.Notices.Any(n => n.Message.Contains("away code")));
+        Assert.IsFalse(host.Runtime.Notices.Any(n => n.Message.Contains(offer.Code) || n.Message.Contains(offer.Code.Replace("-", ""))), "the code is not written to the activity list");
+
+        // A browser at the away address, the way the proxy delivers it.
+        using var phone = host.CreateClient();
+        phone.DefaultRequestHeaders.Host = AwayClient.Host;
+        phone.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.50");
+        async Task<HttpStatusCode> AddAsync(string code)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/pair") { Content = JsonContent.Create(new { code, label = "Phone" }) };
+            request.Headers.Add("Origin", AwayClient.Origin);
+            using var reply = await phone.SendAsync(request);
+            return reply.StatusCode;
+        }
+
+        // Closing the box takes the code back.
+        host.Runtime.CancelAwayCode();
+        Assert.IsFalse(host.Runtime.AwayCodeOpen);
+        Assert.AreEqual(HttpStatusCode.BadRequest, await AddAsync(offer.Code));
+        Assert.AreEqual(0, host.Runtime.Devices.Count);
+
+        // A new code works, once, and the device shows up with away access.
+        var next = host.Runtime.NewAwayCode()!;
+        Assert.AreEqual(HttpStatusCode.OK, await AddAsync(next.Code));
+        Assert.IsFalse(host.Runtime.AwayCodeOpen, "used");
+        await Wait.UntilAsync(() => host.Runtime.Devices.Count == 1);
+        Assert.IsTrue(host.Runtime.Devices.Single().Away);
+        Assert.IsTrue(host.Events.Any(e => e == "paired:Phone"), "the window is told, so the tray can say so");
+
+        // Turning away access off takes the code with it.
+        host.Runtime.NewAwayCode();
+        await host.Runtime.RestartAsync(TestRuntime.AnyFreePort);
+        Assert.IsFalse(host.Runtime.AwayCodeOpen);
+        Assert.IsNull(host.Runtime.NewAwayCode());
     }
 
     [TestMethod]

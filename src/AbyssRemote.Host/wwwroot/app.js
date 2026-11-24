@@ -16,7 +16,7 @@ import { api, fetchFile, refreshIdentity, session } from './api.js';
 import { $, el, icon, saveBlob } from './dom.js';
 import { fileNameFromDisposition } from './format.js';
 import { initPairing, clearPairCode } from './pairing.js';
-import { initAwayView, redeemAwayCode, takeAwayCodeFromAddress } from './away.js';
+import { goAway, initAwayView, isHomeScreenIcon, redeemAwayCode, takeAwayCodeFromAddress } from './away.js';
 import { initHome, showHomeScreen, hideHomeScreen } from './home.js';
 import { createMonitorPicker, monitorLabel, pickMonitor } from './monitors.js';
 
@@ -136,10 +136,10 @@ function showPair(error = '') {
   hideHomeScreen();
   session.csrf = null;
   if (awayAddress) {
-    // At the away address nothing can be paired: a device is set up at home with a code.
+    // At the away address a device is added with an away code from the PC, not with the pairing code.
     showView('away');
     $('awayError').textContent = /pair/i.test(error) ? AWAY_LOST : error;
-    setNetwork('Not set up');
+    setNetwork('Not added');
     return;
   }
   showView('pair');
@@ -150,10 +150,31 @@ function showPair(error = '') {
 // True at the away address (the public one the Gaming Hub forwards to the PC), false at home,
 // null until the PC has said. /api/v1/info answers without a session.
 let awayAddress = null;
-const AWAY_LOST = 'This device is not set up for away access any more. Set it up again at home.';
+const AWAY_LOST = 'This device is not signed in here any more. Add it again with an away code from the PC.';
 async function learnAddress() {
   if (awayAddress !== null) return;
-  try { awayAddress = Boolean((await api('/api/v1/info')).away); } catch { /* not reachable: initialize says so */ }
+  let offered = false; // the PC has an away address
+  try {
+    const info = await api('/api/v1/info');
+    awayAddress = Boolean(info.away);
+    offered = Boolean(info.awayAvailable);
+  } catch { /* not reachable: initialize says so */ }
+  // The switch on the pairing screen is for a browser at home that can go on to the away
+  // address by itself. An icon on an iPhone's Home Screen cannot (see away.js).
+  $('pairAwayRow').classList.toggle('hidden', !offered || awayAddress !== false || isHomeScreenIcon());
+}
+
+// After pairing at home. With "Also use this device away from home" switched on, the browser
+// goes on to the away address with a one-time code of its own and is signed in there too.
+async function afterPairing() {
+  if (!$('pairAwayRow').classList.contains('hidden') && $('pairAway').checked) {
+    try {
+      await refreshIdentity();
+      await goAway();
+      return; // the page is leaving for the away address
+    } catch { /* away access went off meanwhile: the home screen says what is possible */ }
+  }
+  await initialize();
 }
 function showHome() {
   leaveStream();
@@ -1574,7 +1595,7 @@ const gamepads = watchGamepads({
 applySettings(loadSettings());
 buildToggles();
 syncToggles();
-initPairing({ onPaired: initialize });
+initPairing({ onPaired: afterPairing });
 initAwayView({ onReady: initialize });
 initHome({
   openStream,

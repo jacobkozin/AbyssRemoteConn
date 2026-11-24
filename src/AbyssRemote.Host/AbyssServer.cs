@@ -121,6 +121,52 @@ public static class AbyssServer
         return app;
     }
 
+    /// <summary>"Add this device" at the away address: a name and an away code. Text that
+    /// cannot be an away code (the eight digits of a pairing code, say) is explained and not
+    /// counted as a wrong guess: typing the other code is an honest mistake.</summary>
+    private static IResult AddAtTheAwayAddress(ServerContext c, HttpContext ctx, string label, string code)
+    {
+        if (c.Away is not { } away) return Results.NotFound();
+        if (code.Length == 0 || label.Length == 0)
+            return Results.BadRequest(new { error = "Enter the away code and a name for this device." });
+        if (!AwayCodes.LooksLikeCode(code))
+            return Results.BadRequest(new { error = "That is not an away code. An away code has 12 letters and digits: in the Abyss Remote window on the PC, click Show away code." });
+        return UseAwayCode(c, ctx, away, code, label);
+    }
+
+    /// <summary>Uses an away code at the away address and signs this browser in with an away
+    /// key. The window's code adds a new device called <paramref name="newDeviceName"/>; a
+    /// code that a device asked for at home belongs to that device.</summary>
+    private static IResult UseAwayCode(ServerContext c, HttpContext ctx, AwayAccess away, string? code, string? newDeviceName)
+    {
+        string from = AwayRequests.ClientAddress(ctx);
+        var (result, owner) = away.Codes.TryUse(code);
+        if (result == AwayCodeResult.Locked)
+        {
+            c.Notice($"Away codes were locked after too many wrong tries (last from {from}). Make a new one.");
+            return Results.BadRequest(new { error = "Too many wrong codes. Get a new away code and try again." });
+        }
+        bool newDevice = owner == AwayCodes.NewDevice;
+        string? id = result != AwayCodeResult.Accepted ? null
+            : !newDevice ? owner
+            : newDeviceName is { Length: > 0 } ? c.State.Pair(newDeviceName).Id : null;
+        var key = id is null ? null : c.State.SetAwayKey(id);
+        if (key is not { } given)
+        {
+            c.Notice($"Refused an away code from {from}.");
+            return Results.BadRequest(new { error = "That code is wrong or expired. In the Abyss Remote window on the PC, click Show away code for a new one." });
+        }
+        c.Notice(newDevice
+            ? $"Added a new device with an away code: \"{given.Name}\" from {from}."
+            : $"\"{given.Name}\" can now connect away from home (set up from {from}).");
+        ctx.Response.Cookies.Append(SessionCookie, $"{id}.{given.Secret}", new CookieOptions
+        {
+            HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict,
+            IsEssential = true, Path = "/", Expires = given.ExpiresUtc,
+        });
+        return Results.Ok(new { ready = true, paired = true, name = given.Name });
+    }
+
     private static void MapApi(WebApplication app, ServerContext c)
     {
         DeviceRecord? Device(HttpContext ctx) => c.Device(ctx);
@@ -130,7 +176,8 @@ public static class AbyssServer
             ctx.Response.Cookies.Delete(SessionCookie, new CookieOptions { Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/" });
 
         // "away" tells the browser which screen an unpaired visitor gets: pairing, or the away code.
-        app.MapGet("/api/v1/info", (HttpContext ctx) => Results.Ok(new { app = AppInfo.Name, version = AppInfo.Version, away = AwayRequests.IsAway(ctx) }));
+        // away: this request came through the away address. awayAvailable: the PC offers one.
+        app.MapGet("/api/v1/info", (HttpContext ctx) => Results.Ok(new { app = AppInfo.Name, version = AppInfo.Version, away = AwayRequests.IsAway(ctx), awayAvailable = c.Away is not null }));
 
         // The root certificate a phone has to trust before its browser accepts this host. No
         // pairing needed: Export(Cert) writes the public certificate only, never the private
@@ -143,12 +190,10 @@ public static class AbyssServer
         app.MapPost("/api/v1/pair", IResult (HttpContext ctx, PairRequest request) =>
         {
             if (!RequestProtection.SameOrigin(ctx)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-            // New devices are added at home only, whatever code someone has.
-            if (AwayRequests.IsAway(ctx))
-                return Results.Json(new { error = "New devices can only be added on your home network. Pair this device at home first." },
-                    statusCode: StatusCodes.Status403Forbidden);
             string label = StateStore.CleanName(request.Label ?? "");
             string code = (request.Code ?? "").Trim();
+            // At the away address a device is added with an away code. The pairing code never works there.
+            if (AwayRequests.IsAway(ctx)) return AddAtTheAwayAddress(c, ctx, label, code);
             if (code.Length == 0 || label.Length == 0)
                 return Results.BadRequest(new { error = "Enter the pairing code and a name for this device." });
             string address = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -203,31 +248,13 @@ public static class AbyssServer
             return Results.Ok(new { code = AwayCodes.Format(code), url = $"{away.Url}/#away={code}", address = away.Url, expiresUtc = expires });
         });
 
-        // Away from home, step 2, at the away address: the code gives this browser the device's away key.
+        // Away from home, step 2, at the away address: the link the device brought from home
+        // carries its code, which gives this browser the device's away key.
         app.MapPost("/api/v1/away/redeem", IResult (HttpContext ctx, AwayRedeemRequest request) =>
         {
             if (!AwayRequests.IsAway(ctx) || c.Away is not { } away) return Results.NotFound();
             if (!RequestProtection.SameOrigin(ctx)) return Results.StatusCode(StatusCodes.Status403Forbidden);
-            string from = AwayRequests.ClientAddress(ctx);
-            var (result, deviceId) = away.Codes.TryUse(request.Code);
-            if (result == AwayCodeResult.Locked)
-            {
-                c.Notice($"Away codes were locked after too many wrong tries (last from {from}). Ask for a new code at home.");
-                return Results.BadRequest(new { error = "Too many wrong codes. At home, ask for a new code on this device." });
-            }
-            var key = result == AwayCodeResult.Accepted ? c.State.SetAwayKey(deviceId!) : null;
-            if (key is not { } given)
-            {
-                c.Notice($"Refused an away code from {from}.");
-                return Results.BadRequest(new { error = "That code is wrong or expired. At home, ask for a new one on this device." });
-            }
-            c.Notice($"\"{given.Name}\" can now connect away from home (set up from {from}).");
-            ctx.Response.Cookies.Append(SessionCookie, $"{deviceId}.{given.Secret}", new CookieOptions
-            {
-                HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict,
-                IsEssential = true, Path = "/", Expires = given.ExpiresUtc,
-            });
-            return Results.Ok(new { ready = true, name = given.Name });
+            return UseAwayCode(c, ctx, away, request.Code, newDeviceName: null);
         });
 
         app.MapGet("/api/v1/displays", (HttpContext ctx) =>

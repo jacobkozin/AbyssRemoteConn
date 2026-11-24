@@ -92,5 +92,9 @@ public sealed record PairingCode(PairingCodeState State, string Digits, DateTime
 /// <paramref name="Away"/>: it is set up for away access.</summary>
 public sealed record PairedDevice(string Id, string Name, DateTimeOffset CreatedUtc, DateTimeOffset LastSeenUtc, DateTimeOffset ExpiresUtc, bool Away = false);
 
+/// <summary>The away code the window shows on request (1.2): the code as people read it, the
+/// address that carries it (for the QR code), the away address, and when it runs out.</summary>
+public sealed record AwayCodeOffer(string Code, string Url, string Address, DateTimeOffset ExpiresUtc);
+
 /// <summary>One line of the activity list: a pairing, a revocation, a refused connection.</summary>
 public sealed record NoticeLine(DateTimeOffset Time, string Message);

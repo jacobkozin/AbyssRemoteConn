@@ -22,7 +22,9 @@ namespace AbyssRemote.Tests;
 /// The folder then holds address.txt (the address, then a pairing code) and recorded.json (what
 /// reached the fakes). The certificate is a throwaway, so the browser warns about it once.
 /// Creating a file in the folder steers the demo: "stop" ends it, "new-code" writes a fresh
-/// pairing code, and while "locked" or "no-steam" exists the pretend PC is locked or has no Steam.</summary>
+/// pairing code, "away-code" writes a fresh away code to away-code.txt (what the window's "Show
+/// away code" does), and while "locked" or "no-steam" exists the pretend PC is locked or has no
+/// Steam.</summary>
 [TestClass]
 public sealed class DemoServer
 {
@@ -51,7 +53,7 @@ public sealed class DemoServer
             ?? Path.Combine(Path.GetTempPath(), "abyss-remote-demo")).FullName;
         string InFolder(string name) => Path.Combine(folder, name);
         bool Asked(string name) => File.Exists(InFolder(name));
-        foreach (string leftover in new[] { "stop", "new-code", "locked", "no-steam" }) File.Delete(InFolder(leftover));
+        foreach (string leftover in new[] { "stop", "new-code", "away-code", "locked", "no-steam" }) File.Delete(InFolder(leftover));
 
         // ABYSS_REMOTE_DEMO_AWAY=remote.example.test turns away access on for that address; put a
         // proxy in front that sends X-Forwarded-For (see tests/README.md).
@@ -74,6 +76,11 @@ public sealed class DemoServer
             {
                 File.Delete(InFolder("new-code"));
                 WriteAddress();
+            }
+            if (Asked("away-code"))
+            {
+                File.Delete(InFolder("away-code"));
+                if (server.Away is { } away) File.WriteAllText(InFolder("away-code.txt"), AwayCodes.Format(away.Codes.Issue(AwayCodes.NewDevice).Code));
             }
             server.Steam.IsInstalled = !Asked("no-steam");
             string recorded = Recorded(server);

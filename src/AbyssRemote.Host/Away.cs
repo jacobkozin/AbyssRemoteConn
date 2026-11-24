@@ -7,9 +7,10 @@ namespace AbyssRemote.Host;
 
 /// <summary>Away from home (1.2). A reverse proxy on this PC (the Gaming Hub's Caddy) forwards one
 /// public address, for example https://remote.example.duckdns.org, to Abyss Remote over
-/// loopback. A request that arrives that way may only use a device that was paired at home and
-/// then set up for away access there. It cannot pair a new device or fetch the root certificate.
-/// Null in <see cref="ServerContext.Away"/> means the setting is off.</summary>
+/// loopback. That address works at home too, so a device needs no other. A device is added
+/// there with an away code, which the window shows on request, and a device that was paired
+/// at home can take itself there. The pairing code never works there, and the root
+/// certificate is not offered. Null in <see cref="ServerContext.Away"/> means the setting is off.</summary>
 public sealed class AwayAccess
 {
     public AwayAccess(string host, TimeProvider? clock = null)
@@ -42,13 +43,18 @@ public sealed class AwayAccess
 
 public enum AwayCodeResult { Accepted, WrongOrExpired, Locked }
 
-/// <summary>One-time codes that let a device that is already paired set itself up for away
-/// access. Only a request from home can ask for one (see the endpoints), each code belongs to the
-/// device that asked, works once and for ten minutes, and a newer code replaces the older one.
-/// Codes are twelve characters from 32 (2^60 possibilities), and 20 wrong codes in total destroy
-/// every open code, so guessing from the internet gets nowhere.</summary>
+/// <summary>One-time codes for the away address. There are two kinds. The window makes one on
+/// request, to add a new device there (<see cref="NewDevice"/>). And a device that is already
+/// paired asks for one for itself, from home: the hand-over behind "also use this device away
+/// from home". A code works once and for ten minutes, and a newer code of the same owner
+/// replaces the older one. Codes are twelve characters from 32 (2^60 possibilities), and 20
+/// wrong codes in total destroy every open code, so guessing from the internet gets nowhere.</summary>
 public sealed class AwayCodes
 {
+    /// <summary>The owner of the code the window makes. Used at the away address, it adds a
+    /// new device instead of belonging to one.</summary>
+    public const string NewDevice = "";
+
     /// <summary>Letters and digits without 0/O and 1/I, which are easy to mix up when typing.</summary>
     public const string Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     public const int Length = 12;
@@ -77,7 +83,32 @@ public sealed class AwayCodes
         }
     }
 
-    /// <summary>A new code for this device, replacing any older one it had.</summary>
+    /// <summary>True for text that could be an away code: twelve characters of the alphabet
+    /// once spaces and dashes are gone. The eight digits of a pairing code never are.</summary>
+    public static bool LooksLikeCode(string? typed)
+    {
+        string code = Normalize(typed);
+        return code.Length == Length && code.All(Alphabet.Contains);
+    }
+
+    /// <summary>Takes back the open code of this owner. True when there was one.</summary>
+    public bool Cancel(string deviceId)
+    {
+        lock (_sync) return _open.RemoveAll(e => e.DeviceId == deviceId) > 0;
+    }
+
+    /// <summary>True while this owner's code could still be used.</summary>
+    public bool IsOpen(string deviceId)
+    {
+        lock (_sync)
+        {
+            var now = _clock.GetUtcNow();
+            return _open.Any(e => e.DeviceId == deviceId && e.Expires > now);
+        }
+    }
+
+    /// <summary>A new code for this device, replacing any older one it had. For
+    /// <see cref="NewDevice"/>: the window's code, which adds a device.</summary>
     public (string Code, DateTimeOffset ExpiresUtc) Issue(string deviceId)
     {
         var letters = new char[Length];
@@ -94,7 +125,8 @@ public sealed class AwayCodes
         }
     }
 
-    /// <summary>Uses a code. On success returns the device it was made for; the code is gone.</summary>
+    /// <summary>Uses a code. On success returns the device it was made for (or
+    /// <see cref="NewDevice"/>); the code is gone.</summary>
     public (AwayCodeResult Result, string? DeviceId) TryUse(string? typed)
     {
         string code = Normalize(typed);

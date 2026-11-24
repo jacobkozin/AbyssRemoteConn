@@ -87,8 +87,9 @@ dotnet test tests\AbyssRemote.Tests --filter DemoServer
 The folder gets `address.txt` (the address, then a pairing code) and `recorded.json` (what
 reached the fakes). The certificate is a throwaway, so the browser warns about it once.
 Creating a file in the folder steers the demo: `stop` ends it, `new-code` writes a fresh
-pairing code, and while `locked` or `no-steam` exists the pretend PC is locked or has no
-Steam. It has three monitors, fourteen games (two without a cover), four files and a 5 MB
+pairing code, `away-code` writes a fresh away code to `away-code.txt` (what "Show away code"
+does in the window), and while `locked` or `no-steam` exists the pretend PC is locked or has
+no Steam. It has three monitors, fourteen games (two without a cover), four files and a 5 MB
 upload limit. The client files are served straight from `src\AbyssRemote.Host\wwwroot`, so an
 edit shows on reload without a rebuild.
 

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using AbyssRemote.Host;
@@ -142,6 +143,73 @@ public sealed class WindowLayoutTests
         int apart = Math.Max(Math.Abs(expected.R - actual.R), Math.Max(Math.Abs(expected.G - actual.G), Math.Abs(expected.B - actual.B)));
         Assert.IsTrue(apart <= 3, $"{what}: {actual} instead of {expected}");
     }
+
+    /// <summary>The box that shows the away code: with the code, after a device used it, and
+    /// after the code stopped working.</summary>
+    [TestMethod]
+    [DataRow(1f)]
+    [DataRow(1.5f)]
+    [DataRow(2f)]
+    public void TheAwayCodeBoxFitsWhatItShows(float scale) => OnWindowThread(() =>
+    {
+        var now = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        using var view = new AwayCodeView(scale);
+        view.Show(new AwayCodeOffer("ABCD-EFGH-JKLM", "https://remote.example.duckdns.org/#pair=ABCDEFGHJKLM", "https://remote.example.duckdns.org", now.AddMinutes(10)), now);
+        view.CreateControl();
+        Check(view, $"the away code at {scale * 100}%");
+        Assert.IsFalse(view.Finished);
+        Assert.AreEqual(view.NewCode.Width, view.Done.Width, "the two buttons are one width");
+        int withCode = view.Height;
+
+        view.ShowOutcome("Living room iPad");
+        Check(view, $"a device was added at {scale * 100}%");
+        Assert.IsTrue(view.Finished);
+        Assert.IsTrue(view.Height < withCode, "the box shrinks to its text");
+        Assert.AreEqual("Add another device", view.NewCode.Text);
+        Assert.AreEqual(view.NewCode.Width, view.Done.Width);
+
+        view.ShowOutcome(null);
+        Check(view, $"the code stopped working at {scale * 100}%");
+        Assert.AreEqual("New code", view.NewCode.Text);
+    });
+
+    /// <summary>The real box against a running server: a device uses the code at the away
+    /// address, and the box says that it was added. The box exists but is never shown.</summary>
+    [TestMethod]
+    public void TheAwayCodeBoxSaysWhenADeviceUsedItsCode() => OnWindowThread(() =>
+    {
+        var host = new TestRuntime();
+        try
+        {
+            Task.Run(() => host.Runtime.StartAsync(TestRuntime.AnyFreePort with { AwayHost = AwayClient.Host })).GetAwaiter().GetResult();
+            var offer = host.Runtime.NewAwayCode()!;
+            using var box = new AwayCodeDialog(host.Runtime, offer, 1f);
+            _ = box.Handle;
+            Assert.IsFalse(box.View.Finished);
+
+            Task.Run(async () =>
+            {
+                using var phone = host.CreateClient();
+                phone.DefaultRequestHeaders.Host = AwayClient.Host;
+                phone.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.50");
+                var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/pair") { Content = JsonContent.Create(new { code = offer.Code, label = "Phone on the train" }) };
+                request.Headers.Add("Origin", AwayClient.Origin);
+                using var reply = await phone.SendAsync(request);
+                Assert.AreEqual(HttpStatusCode.OK, reply.StatusCode);
+            }).GetAwaiter().GetResult();
+
+            // The box looks twice a second; its timer needs this thread's messages to run.
+            var until = DateTime.UtcNow.AddSeconds(10);
+            while (!box.View.Finished && DateTime.UtcNow < until)
+            {
+                Application.DoEvents();
+                Thread.Sleep(20);
+            }
+            Assert.IsTrue(box.View.Finished, "the box noticed that the code is gone");
+            Assert.AreEqual("Add another device", box.View.NewCode.Text, "because a device used it, not because it ran out");
+        }
+        finally { Task.Run(() => host.DisposeAsync().AsTask()).GetAwaiter().GetResult(); }
+    });
 
     /// <summary>The activity list shows a scroll bar only while there is more than fits. The
     /// boxes are real here, so changing the scroll bar has to replace one, and the newest line
@@ -332,6 +400,7 @@ public sealed class WindowLayoutTests
     {
         public void NewPairingCode() { }
         public void CopyAddress() { }
+        public void ShowAwayCode() { }
         public void RevokeDevice(PairedDevice device) { }
         public void RevokeAllDevices() { }
         public void TryAgain() { }

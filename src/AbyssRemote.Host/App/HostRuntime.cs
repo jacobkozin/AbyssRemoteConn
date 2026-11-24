@@ -29,6 +29,7 @@ public sealed class HostRuntime : IAsyncDisposable
     private readonly object _refreshing = new();
     private readonly List<NoticeLine> _notices = new();
     private volatile StateStore? _state;
+    private volatile AwayAccess? _away; // while the server runs with away access on
     private WebApplication? _app;
     private HostCertificateSet? _certificates;
     private System.Threading.Timer? _refreshTimer;
@@ -115,6 +116,25 @@ public sealed class HostRuntime : IAsyncDisposable
         PairingCodeChanged?.Invoke();
         return code;
     }
+
+    /// <summary>Makes the one-time away code that adds a new device at the away address, for
+    /// the window to show when the user asks for it. It replaces the window's earlier code.
+    /// Null while the server is not running with away access on.</summary>
+    public AwayCodeOffer? NewAwayCode()
+    {
+        if (_away is not { } away) return null;
+        var (code, expires) = away.Codes.Issue(AwayCodes.NewDevice);
+        AddNotice("An away code for a new device was shown in this window.");
+        // The code travels in the fragment, like a pairing code: it never reaches a request log.
+        return new AwayCodeOffer(AwayCodes.Format(code), $"{away.Url}/#pair={code}", away.Url, expires);
+    }
+
+    /// <summary>Takes the window's away code back when it is no longer shown, so a code nobody
+    /// used stops working at once.</summary>
+    public void CancelAwayCode() => _away?.Codes.Cancel(AwayCodes.NewDevice);
+
+    /// <summary>True while the window's away code could still be used.</summary>
+    public bool AwayCodeOpen => _away?.Codes.IsOpen(AwayCodes.NewDevice) == true;
 
     /// <summary>Removes one paired device and closes its connections at once.</summary>
     public bool RevokeDevice(string id)
@@ -257,6 +277,7 @@ public sealed class HostRuntime : IAsyncDisposable
                 _app = app;
                 _certificates = certificates;
             }
+            _away = away;
             // Ctrl+C in a console stops the web server behind our back; follow it.
             var started = app;
             app.Lifetime.ApplicationStopping.Register(() => { if (IsCurrent(started)) _ = Task.Run(StopAsync); });
@@ -295,6 +316,7 @@ public sealed class HostRuntime : IAsyncDisposable
         }
         _refreshTimer?.Dispose();
         _refreshTimer = null;
+        _away = null; // its codes go with it
         if (app is null) return;
 
         // Tell browsers to reconnect, then give their connections a moment to close. Whatever

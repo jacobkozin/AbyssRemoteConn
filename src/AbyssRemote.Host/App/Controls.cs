@@ -169,6 +169,7 @@ internal interface IWindowActions
 {
     void NewPairingCode();
     void CopyAddress();
+    void ShowAwayCode();
     void RevokeDevice(PairedDevice device);
     void RevokeAllDevices();
     void TryAgain();

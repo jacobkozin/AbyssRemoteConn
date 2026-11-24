@@ -122,10 +122,11 @@ internal sealed class ProblemCard : Card
 }
 
 /// <summary>How to connect: the address to open, the pairing code with its remaining time,
-/// and in home-network mode a QR code that holds both.</summary>
+/// and in home-network mode a QR code that holds both. With away access on, also the address
+/// that works at home and away, and the button that shows the code for it.</summary>
 internal sealed class ConnectCard : Card
 {
-    private readonly RaisedButton _copy, _newCode;
+    private readonly RaisedButton _copy, _newCode, _awayCode;
     private readonly System.Windows.Forms.Timer _copiedTimer = new() { Interval = 1500 };
     private HostStatus? _status;
     private PairingCode _code = PairingCode.None;
@@ -137,6 +138,8 @@ internal sealed class ConnectCard : Card
     {
         _copy = Add(new RaisedButton("Copy address"));
         _newCode = Add(new RaisedButton("New code", ButtonKind.Primary));
+        _awayCode = Add(new RaisedButton("Show away code") { Visible = false });
+        _awayCode.Click += (_, _) => Actions.ShowAwayCode();
         _newCode.Click += (_, _) => Actions.NewPairingCode();
         _copy.Click += (_, _) =>
         {
@@ -181,6 +184,7 @@ internal sealed class ConnectCard : Card
         int y = Header(pass, width), inner = width - 2 * Pad;
         var running = _status?.Running;
         _copy.Visible = _newCode.Visible = running is not null;
+        _awayCode.Visible = running?.AwayUrl is not null;
         if (running is null)
         {
             string waiting = _status?.Phase == HostPhase.Starting
@@ -220,13 +224,35 @@ internal sealed class ConnectCard : Card
             int qrBottom = DrawQr(pass, _code.PairingUrl(running.MainUrl, _now), qrX, qrY, qrSide, usable);
             y = Math.Max(y, qrBottom);
         }
-        else
+        else if (running.AwayUrl is null)
         {
             y += Ui.Px(16);
             y += pass.Text("Phones and tablets need home-network mode. Turn on “Allow devices on my home network” under Settings.",
                 Ui.Small, Palette.Muted, Pad, y, inner);
         }
+        if (running.AwayUrl is { } awayUrl) y = AwayRow(pass, width, y, awayUrl);
         return y + Pad;
+    }
+
+    /// <summary>With away access on: the address that works at home and away, and the button
+    /// that shows the code for it. The code itself is never on this card: it appears in a box
+    /// of its own, only when asked for.</summary>
+    private int AwayRow(Pass pass, int width, int y, string awayUrl)
+    {
+        int buttonWidth = _awayCode.WidthFor(Ui), buttonHeight = Ui.ButtonHeight(32);
+        int textWidth = width - 2 * Pad - buttonWidth - Ui.Px(12);
+        y += Ui.Px(14);
+        if (pass.Graphics is { } g)
+        {
+            using var line = new Pen(Palette.Border, Ui.Outline);
+            g.DrawLine(line, Pad, y, width - Pad, y);
+        }
+        y += Ui.Px(12);
+        int labelHeight = pass.Line("At home and away", Ui.Bold, Palette.Accent, Pad, y, textWidth);
+        int addressHeight = pass.Line(awayUrl, Ui.Body, Palette.Text, Pad, y + labelHeight + Ui.Px(1), textWidth);
+        int rowHeight = Math.Max(labelHeight + Ui.Px(1) + addressHeight, buttonHeight);
+        pass.Place(_awayCode, width - Pad - buttonWidth, y + (rowHeight - buttonHeight) / 2, buttonWidth, buttonHeight);
+        return y + rowHeight;
     }
 
     /// <summary>The QR code on a white tile with a caption. Returns the y coordinate below it.</summary>

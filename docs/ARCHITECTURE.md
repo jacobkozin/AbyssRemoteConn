@@ -52,7 +52,8 @@ The first three sit on `HostRuntime`.
   list and the clock. The tests fill it with a temporary folder, throwaway certificates and
   fakes, and then start the real server.
 - **`WindowApp`** connects the runtime to the window (`MainWindow` and its cards: Connect,
-  Devices, Phone setup, Settings, Activity), the tray icon, the saved settings
+  Devices, Phone setup, Settings, Activity; `AwayCodeDialog`, the box that shows an away code
+  on request), the tray icon, the saved settings
   (`preferences.json`), "Start with Windows" (`Autostart`) and the single-instance check. The
   window is built in code; there are no designer files. The runtime's events arrive on other
   threads and are handed to the window's thread.

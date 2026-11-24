@@ -45,6 +45,13 @@ internal static class UiSnapshot
                 view.Show(state);
                 Save(view, Path.Combine(folder, $"window-{name}{suffix}.png"));
             }
+            var shown = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+            using var awayCode = new AwayCodeView(scale);
+            awayCode.Show(new AwayCodeOffer("ABCD-EFGH-JKLM", "https://remote.example.duckdns.org/#pair=ABCDEFGHJKLM", "https://remote.example.duckdns.org",
+                shown + AwayCodes.Lifetime - TimeSpan.FromSeconds(19)), shown);
+            Save(awayCode, Path.Combine(folder, $"away-code{suffix}.png"));
+            awayCode.ShowOutcome("Living room iPad");
+            Save(awayCode, Path.Combine(folder, $"away-code-added{suffix}.png"));
             using var question = new ConfirmView("Revoke all devices?",
                 "All 3 paired devices are disconnected at once. To use one again, pair it with a new code.", "Revoke all", danger: true, scale);
             Save(question, Path.Combine(folder, $"confirm{suffix}.png"));
@@ -119,6 +126,7 @@ internal static class UiSnapshot
     {
         public void NewPairingCode() { }
         public void CopyAddress() { }
+        public void ShowAwayCode() { }
         public void RevokeDevice(PairedDevice device) { }
         public void RevokeAllDevices() { }
         public void TryAgain() { }

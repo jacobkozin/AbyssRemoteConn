@@ -131,7 +131,7 @@ internal sealed class SettingsCard : Card
         pass.Place(_away, Pad, y, inner, height);
         y += height + Ui.Px(3);
         // Says what to tap, and where: the set-up itself happens on the device.
-        y += pass.Text("Set each device up once, at home: open Abyss Remote on it and tap “Set up away access”. After that it works from anywhere, at the address below.",
+        y += pass.Text("A device opens the address below and types an away code: click “Show away code” under Connect. That address works at home too.",
             Ui.Small, Palette.Muted, Pad + indent, y, inner - indent) + Ui.Px(12);
         int awayLabelWidth = Ui.MeasureLine("Away address", Ui.Bold).Width, awayApplyWidth = _awayApply.WidthFor(Ui);
         int awayFieldWidth = Math.Max(Ui.Px(120), inner - awayLabelWidth - Ui.Px(12) - awayApplyWidth - Ui.Px(8));

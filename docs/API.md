@@ -36,11 +36,11 @@ answer is 403. Both have an empty body, and so do most 404 answers. Other errors
 
 | Route | Needs | Result |
 | --- | --- | --- |
-| `GET /api/v1/info` | nothing | `{ app, version, away }` (`away`: true at the away address) |
+| `GET /api/v1/info` | nothing | `{ app, version, away, awayAvailable }` (`away`: true at the away address; `awayAvailable`: the PC has one) |
 | `GET /AbyssRemote-RootCA.cer` | nothing | The root certificate's public part, as a download. 404 at the away address |
-| `POST /api/v1/pair` | Origin | `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries, 403 at the away address |
+| `POST /api/v1/pair` | Origin | Body `{ code, label }`. `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries. At the away address `code` must be an away code from the window, and the cookie holds an away key |
 | `POST /api/v1/away/code` | cookie + Origin + CSRF, at home | `{ code, url, address, expiresUtc }`: a one-time away code for this device. 409 while away access is off, 403 at the away address |
-| `POST /api/v1/away/redeem` | Origin, at the away address | Body `{ code }`. `{ ready, name }`, sets the away cookie. 400 wrong, expired or locked; 404 at home |
+| `POST /api/v1/away/redeem` | Origin, at the away address | Body `{ code }`: the code a device asked for at home. `{ ready, paired, name }`, sets the away cookie. 400 wrong, expired or locked (also for a code from the window, which needs a name); 404 at home |
 | `GET /api/v1/me` | cookie | `{ id, device, csrf, version, features }` |
 | `GET /api/v1/displays` | cookie | `[{ id, name, x, y, width, height, primary, friendlyName, refreshHz, scale }]` in physical pixels |
 | `GET /api/v1/displays/{id}/preview?width=` | cookie | JPEG still of one monitor, 160–960 px wide (default 480). 404, 503 |
@@ -73,10 +73,14 @@ get 421.
 While away access is on, a reverse proxy on the PC forwards the away address to the host. A
 request counts as away when its `Host` is that address, it has `X-Forwarded-For` or
 `Forwarded`, and it comes from loopback; otherwise proxy headers mean 421. At the away
-address the session cookie must hold the device's away key (from `POST /api/v1/away/redeem`),
-not its home key. The same cookie name is used; the browser keeps one per address. A code is
-twelve characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-EFGH-JKLM`; spaces,
-dashes and small letters are ignored. The link in `url` carries it as `#away=<code>`.
+address the session cookie must hold the device's away key, not its home key. The same
+cookie name is used; the browser keeps one per address. There are two ways to get one. The
+window makes an away code on request ("Show away code"); `POST /api/v1/pair` at the away
+address with that code and a name adds a new device. And a device paired at home asks for a
+code of its own with `POST /api/v1/away/code` and uses it with `POST /api/v1/away/redeem`. A
+code is twelve characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-EFGH-JKLM`;
+spaces, dashes and small letters are ignored. The window's QR code carries its code as
+`#pair=<code>`, and the link in `url` carries a device's own as `#away=<code>`.
 
 ### Root certificate: `GET /AbyssRemote-RootCA.cer`
 

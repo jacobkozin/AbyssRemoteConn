@@ -230,7 +230,7 @@ internal sealed class MainWindow : Form
 {
     // Logical pixels. The start size shows every card without scrolling in home-network mode
     // with away access and two devices, where the screen has the room.
-    private static readonly Size StartSize = new(1100, 1040), SmallestSize = new(600, 480);
+    private static readonly Size StartSize = new(1100, 1110), SmallestSize = new(600, 480);
     private bool _placed, _closeButtonUsed;
 
     public MainWindow(IWindowActions actions)
