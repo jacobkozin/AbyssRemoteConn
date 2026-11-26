@@ -60,7 +60,9 @@ checked on 2026-11-26 with 458 automated tests (2 more are skipped) and twelve b
 check files, and in a phone-sized Chromium against the demo server through a stand-in for the
 proxy: a device paired at the away address with the window's code, a device paired at home
 moved on to the away address by itself, and with the proxy "closed" no browser was sent
-there. Not tried yet: a real phone on mobile data.
+there. On the development PC, with the Gaming Hub's Caddy running, the rebuilt program found
+its away address working and served the new pairing screen through it. Not tried yet: pairing
+a real phone there, and a real phone on mobile data.
 
 **Not tested yet, or not in any systematic way:**
 
