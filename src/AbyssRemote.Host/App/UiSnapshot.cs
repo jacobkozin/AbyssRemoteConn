@@ -45,13 +45,6 @@ internal static class UiSnapshot
                 view.Show(state);
                 Save(view, Path.Combine(folder, $"window-{name}{suffix}.png"));
             }
-            var shown = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
-            using var awayCode = new AwayCodeView(scale);
-            awayCode.Show(new AwayCodeOffer("ABCD-EFGH-JKLM", "https://remote.example.duckdns.org/#pair=ABCDEFGHJKLM", "https://remote.example.duckdns.org",
-                shown + AwayCodes.Lifetime - TimeSpan.FromSeconds(19)), shown);
-            Save(awayCode, Path.Combine(folder, $"away-code{suffix}.png"));
-            awayCode.ShowOutcome("Living room iPad");
-            Save(awayCode, Path.Combine(folder, $"away-code-added{suffix}.png"));
             using var question = new ConfirmView("Revoke all devices?",
                 "All 3 paired devices are disconnected at once. To use one again, pair it with a new code.", "Revoke all", danger: true, scale);
             Save(question, Path.Combine(folder, $"confirm{suffix}.png"));
@@ -95,11 +88,13 @@ internal static class UiSnapshot
         var notReady = new PhoneSetup(FirewallVerdict.NoRule, NetworkKind.Public, "Network 2", ControllerDriverInstalled: false);
         var connected = new HashSet<string> { "a" };
         var nobody = new HashSet<string>();
-        Size normal = new(1100, 1080), narrow = new(600, 900); // tall enough that the first sample needs no scroll bar (see WindowLayoutTests)
+        Size normal = new(1100, 1100), narrow = new(600, 900); // the window's start size: the first two samples need no scroll bar (see WindowLayoutTests)
 
         yield return ("home-network", new WindowState(Running(lan: true), code, devices, connected, notices, ready, true, true, now), normal);
         yield return ("away", new WindowState(Running(lan: true, away: "remote.example.duckdns.org"), code, devices, connected, notices, ready, true, true, now,
-            AwayHost: "remote.example.duckdns.org"), normal);
+            AwayHost: "remote.example.duckdns.org", Away: AwayVerdict.Working), normal);
+        yield return ("away-not-forwarded", new WindowState(Running(lan: true, away: "remote.example.duckdns.org"), code, devices, connected, notices, ready, true, true, now,
+            AwayHost: "remote.example.duckdns.org", Away: AwayVerdict.NotAnswering), normal);
         yield return ("this-pc", new WindowState(Running(lan: false), code, [], nobody, [], notReady, true, false, now), normal);
         yield return ("code-used", new WindowState(Running(lan: true), code with { State = PairingCodeState.Used, Digits = "" }, devices[..1], nobody, notices[..2], notReady, false, false, now), normal);
         var failed = new HostStatus(HostPhase.Failed, new HostRunOptions(false, 8444),
@@ -126,7 +121,6 @@ internal static class UiSnapshot
     {
         public void NewPairingCode() { }
         public void CopyAddress() { }
-        public void ShowAwayCode() { }
         public void RevokeDevice(PairedDevice device) { }
         public void RevokeAllDevices() { }
         public void TryAgain() { }

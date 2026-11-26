@@ -15,7 +15,7 @@ restored once on a fresh clone. After that the tests run without a package sourc
   "Phone setup", the file-name rules, and the reader for Steam's files on made-up folders.
 - **Integration tests** (`ServerIntegrationTests`, `GameModeProtocolTests`, and a class per
   feature: `DisplayPreviewTests`, `FileTransferTests`, `FileTransferAttackTests`,
-  `HostActionTests`, `SteamEndpointTests`): each test starts the real web server (Kestrel, TLS
+  `HostActionTests`, `SteamEndpointTests`, `AwayAccessTests`): each test starts the real web server (Kestrel, TLS
   with a throwaway certificate, all middleware and endpoints) on a free loopback port, with
   fake desktop, input, clipboard, video, audio and host-action sources that record what
   reaches them, a made-up Steam folder and a temporary transfer folder. The tests then act as
@@ -57,7 +57,8 @@ Get-ChildItem tests\web\*-checks.mjs | ForEach-Object { node $_.FullName }
 | File | Checks |
 | --- | --- |
 | `client-checks.mjs` | Every browser module parses as an ES module, imports resolve, every element id and icon the scripts use exists, there are no inline scripts or styles (the CSP would block them), nothing loads from other sites, every WebSocket carries the CSRF subprotocol, and the cache-busting version matches the project version |
-| `pairing-checks.mjs` | A code in a `#pair=` address fills the form and leaves the address bar at once, the pairing screen never logs or stores it, and the suggested device name fits the device |
+| `pairing-checks.mjs` | A code in a `#pair=` address fills the form and leaves the address bar at once, the pairing screen never logs or stores it, the suggested device name fits the device, and what the screen shows at home, at the away address, in Safari on an iPhone and in a Home Screen icon |
+| `away-checks.mjs` | The hand-over code a paired browser brings to the away address (its shape, and that it leaves the address bar at once), and what the "Away from home" panel says in each state |
 | `monitors-checks.mjs` | Monitor labels, shapes, preview sizes, and which monitor is picked when the remembered one is gone |
 | `library-checks.mjs` | Filtering the games list and how many games are shown at first |
 | `files-checks.mjs` | Tidying file names so the PC accepts them (the PC's own rule is written out again in the check), sizes and dates as text |
@@ -87,9 +88,8 @@ dotnet test tests\AbyssRemote.Tests --filter DemoServer
 The folder gets `address.txt` (the address, then a pairing code) and `recorded.json` (what
 reached the fakes). The certificate is a throwaway, so the browser warns about it once.
 Creating a file in the folder steers the demo: `stop` ends it, `new-code` writes a fresh
-pairing code, `away-code` writes a fresh away code to `away-code.txt` (what "Show away code"
-does in the window), and while `locked` or `no-steam` exists the pretend PC is locked or has
-no Steam. It has three monitors, fourteen games (two without a cover), four files and a 5 MB
+pairing code, and while `locked`, `no-steam` or `away-down` exists the pretend PC is locked,
+has no Steam, or its away address is not forwarded. It has three monitors, fourteen games (two without a cover), four files and a 5 MB
 upload limit. The client files are served straight from `src\AbyssRemote.Host\wwwroot`, so an
 edit shows on reload without a rebuild.
 

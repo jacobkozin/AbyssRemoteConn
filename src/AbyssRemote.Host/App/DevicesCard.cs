@@ -19,7 +19,7 @@ internal sealed class DevicesCard : Card
     }
 
     /// <summary>Returns true when the number of rows changed, so the window lays itself out again.</summary>
-    /// <param name="awayOn">Away access is on, so each row says whether its device is set up for it.</param>
+    /// <param name="awayOn">Away access is on, so each row says whether its device has away access.</param>
     public bool Show(IReadOnlyList<PairedDevice> devices, IReadOnlySet<string> connected, DateTimeOffset now, bool awayOn = false)
     {
         bool rowsChanged = devices.Count != _devices.Count;

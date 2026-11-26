@@ -49,11 +49,10 @@ The first three sit on `HostRuntime`.
   whenever something a person would want to see changes.
 - **`HostEnvironment`** is everything the runtime takes from outside: the data folder, the web
   root, the certificate source, the desktop, the clipboard, the feature modules, the address
-  list and the clock. The tests fill it with a temporary folder, throwaway certificates and
+  list, the clock and the check of the away address. The tests fill it with a temporary folder, throwaway certificates and
   fakes, and then start the real server.
 - **`WindowApp`** connects the runtime to the window (`MainWindow` and its cards: Connect,
-  Devices, Phone setup, Settings, Activity; `AwayCodeDialog`, the box that shows an away code
-  on request), the tray icon, the saved settings
+  Devices, Phone setup, Settings, Activity), the tray icon, the saved settings
   (`preferences.json`), "Start with Windows" (`Autostart`) and the single-instance check. The
   window is built in code; there are no designer files. The runtime's events arrive on other
   threads and are handed to the window's thread.
@@ -104,7 +103,10 @@ between restarts.
 3. **Host allowlist:** requests must name a host this PC really has (DNS-rebinding defense).
    Away access (1.2) adds one more name, the away address, which only counts with a proxy
    header on a loopback connection (`AwayRequests.Route`); proxy headers with any other name
-   are refused. Away requests need the device's separate away key (`StateStore`).
+   are refused. Away requests need the device's separate away key (`StateStore`). The
+   proxy is another program, so `AwayProbe` asks the away address on the PC itself whether it
+   leads here, and the runtime keeps the answer (`HostRuntime.Away`) for the window and for
+   the endpoints that would send a browser there.
 4. **Pairing:** an 8-digit code from a cryptographic RNG, shown only in the Abyss Remote
    window (in home-network mode also inside its QR code), valid 10 minutes and once. Limits:
    5 tries per address per 5 minutes, and 20 wrong tries in total destroy the code.

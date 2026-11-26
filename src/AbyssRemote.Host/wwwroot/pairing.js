@@ -1,5 +1,6 @@
 // The pairing screen. An eight-digit, one-time code from the Abyss Remote window on the PC
-// turns this browser into a paired device.
+// turns this browser into a paired device. It is the same screen at home and at the away
+// address; pairingLayout says what differs.
 import { $ } from './dom.js';
 import { api } from './api.js';
 
@@ -23,6 +24,40 @@ export function guessDeviceName(platform, touchPoints = 0) {
   if (/Android/.test(system) || (/^Linux (arm|aarch)/.test(system) && touchPoints > 0)) return 'My Android device';
   if (/^Linux/.test(system)) return 'My Linux PC';
   return 'My device';
+}
+
+/** What the pairing screen shows for where it is opened.
+ *  `away`: at the away address, which works at home and away and has a certificate that every
+ *  device trusts already. `offered`: the PC has an away address, and it works right now.
+ *  `apple`: an iPhone or iPad. `icon`: an icon on its Home Screen. */
+export function pairingLayout({ away = false, offered = false, apple = false, icon = false } = {}) {
+  // Safari on an iPhone: an icon made after pairing keeps its own sign-in and starts unpaired,
+  // so the icon comes first. At home it should be made from the away address when there is one.
+  const safari = apple && !icon;
+  return {
+    anywhere: away,
+    certificateHelp: !away,
+    awaySwitch: offered && !away && !icon, // an icon cannot move on to another address
+    iconHint: safari && (away || !offered),
+    iconAwayHint: safari && offered && !away,
+  };
+}
+
+/** Arranges the pairing screen (see pairingLayout). `awayUrl` is the away address, for the
+ *  link in the hint that sends an iPhone there. */
+export function arrangePairing(where, awayUrl = '') {
+  const layout = pairingLayout(where);
+  $('pairAnywhere').classList.toggle('hidden', !layout.anywhere);
+  $('pairCertHelp').classList.toggle('hidden', !layout.certificateHelp);
+  $('pairForwardNote').classList.toggle('hidden', !layout.certificateHelp);
+  $('pairAwayRow').classList.toggle('hidden', !layout.awaySwitch);
+  $('pairIconHint').classList.toggle('hidden', !layout.iconHint);
+  $('pairIconAwayHint').classList.toggle('hidden', !layout.iconAwayHint);
+  if (layout.iconAwayHint) {
+    $('pairIconAwayLink').href = awayUrl;
+    $('pairIconAwayLink').textContent = String(awayUrl).replace(/^https?:\/\//i, '');
+  }
+  return layout;
 }
 
 /** Sets up the form. `onPaired` runs after the PC accepted the code. */

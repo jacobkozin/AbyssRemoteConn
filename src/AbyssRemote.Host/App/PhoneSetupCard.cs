@@ -3,8 +3,9 @@ using System.Drawing.Drawing2D;
 namespace AbyssRemote.Host.App;
 
 /// <summary>The checklist for using Abyss Remote from a phone: the firewall rule, the network
-/// type, the certificate the phone has to trust, and the controller driver. The card only
-/// reports; its buttons hand the actual changes to Windows (a UAC prompt, the Settings app).</summary>
+/// type, the certificate the phone has to trust, the controller driver and, with away access
+/// on, whether the away address leads here. The card only reports; its buttons hand the actual
+/// changes to Windows (a UAC prompt, the Settings app).</summary>
 internal sealed class PhoneSetupCard : Card
 {
     private enum Mark { Done, ToDo, Problem, Info }
@@ -12,6 +13,7 @@ internal sealed class PhoneSetupCard : Card
     private readonly RaisedButton _checkAgain, _addRule, _openSettings, _saveCertificate;
     private PhoneSetup _setup = PhoneSetup.NotChecked;
     private HostStatus? _status;
+    private AwayVerdict _away;
 
     public PhoneSetupCard(IWindowActions actions) : base("Phone setup", actions)
     {
@@ -25,10 +27,10 @@ internal sealed class PhoneSetupCard : Card
         _saveCertificate.Click += (_, _) => Actions.SaveCertificate();
     }
 
-    public void Show(PhoneSetup setup, HostStatus status)
+    public void Show(PhoneSetup setup, HostStatus status, AwayVerdict away = AwayVerdict.Unknown)
     {
-        if (Equals(setup, _setup) && Equals(status, _status)) return;
-        (_setup, _status) = (setup, status);
+        if (Equals(setup, _setup) && Equals(status, _status) && away == _away) return;
+        (_setup, _status, _away) = (setup, status, away);
         Invalidate();
     }
 
@@ -81,6 +83,23 @@ internal sealed class PhoneSetupCard : Card
             ? "A game controller connected to the phone or tablet works as an Xbox controller in PC games."
             : "Only needed to play with a game controller through the phone or tablet. See “Controllers” in the README.";
         y = Row(pass, width, y, mark, title, detail, null);
+
+        // 5. With away access on: does the away address lead here? Another program on this PC
+        // has to forward it, and that program may not be running.
+        if (_status?.Running?.AwayUrl is { } awayUrl)
+        {
+            (mark, title, detail) = _away switch
+            {
+                AwayVerdict.Working => (Mark.Done, "The away address leads to Abyss Remote",
+                    $"Checked on this PC for {awayUrl}. From outside it also needs your router and the address's name to be right."),
+                AwayVerdict.NotAnswering => (Mark.Problem, "The away address does not answer",
+                    $"Nothing on this PC forwards {awayUrl}. Start the web server that does (for example the Gaming Hub), then check again."),
+                AwayVerdict.SomethingElse => (Mark.Problem, "Another program answers at the away address",
+                    $"{awayUrl} does not lead to Abyss Remote. Check the web server that should forward it."),
+                _ => (Mark.Info, "Checking the away address", "This takes a moment."),
+            };
+            y = Row(pass, width, y, mark, title, detail, null);
+        }
         return y + Pad - Ui.Px(12);
     }
 
@@ -107,10 +126,16 @@ internal sealed class PhoneSetupCard : Card
         int textWidth = width - Pad - TextX;
         var running = _status?.Running;
         if (pass.Graphics is { } g) DrawMark(g, Mark.Info, Pad, y);
-        y += pass.Text("Trust the Abyss Remote certificate on the phone (once)", Ui.Bold, Palette.Text, TextX, y, textWidth) + Ui.Px(2);
+        // The away address has a certificate that every device trusts already. While it works,
+        // this step is only for a device that uses the home address.
+        bool homeOnly = running?.AwayUrl is not null && _away == AwayVerdict.Working;
+        y += pass.Text(homeOnly ? "For the home address: trust the Abyss Remote certificate (once)" : "Trust the Abyss Remote certificate on the phone (once)",
+            Ui.Bold, Palette.Text, TextX, y, textWidth) + Ui.Px(2);
         _saveCertificate.Visible = running is not null;
         if (running is null)
             return y + pass.Text("The certificate is shown here once Abyss Remote is running.", Ui.Small, Palette.Muted, TextX, y, textWidth) + Ui.Px(12);
+        if (homeOnly)
+            y += pass.Text("A device that uses the away address does not need this.", Ui.Small, Palette.Muted, TextX, y, textWidth) + Ui.Px(4);
 
         y += pass.Text("Before trusting it, check that the phone shows this SHA-256 fingerprint:", Ui.Small, Palette.Muted, TextX, y, textWidth) + Ui.Px(4);
         foreach (string line in FingerprintLines(running.RootFingerprint, textWidth))

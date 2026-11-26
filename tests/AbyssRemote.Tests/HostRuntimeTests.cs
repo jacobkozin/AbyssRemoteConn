@@ -55,11 +55,21 @@ public sealed class TestRuntime : IAsyncDisposable
     public HostRuntime Runtime { get; }
     public IReadOnlyList<string> Events { get { lock (_events) return _events.ToList(); } }
 
+    /// <summary>What the away check finds. A test never looks for a real proxy on this PC.</summary>
+    public AwayVerdict AwayAnswer { get; set; } = AwayVerdict.Working;
+    /// <summary>What the cheap look in between finds: does the proxy still listen?</summary>
+    public bool AwayStillListening { get; set; } = true;
+    /// <summary>How often the away address was asked through the proxy, and how often only looked at.</summary>
+    public int AwayAsked, AwayLooked;
+
     /// <summary>An environment in which nothing reaches the real PC: its files live in
     /// <paramref name="dataDirectory"/>, the certificates are throwaway and the desktop is a fake.</summary>
     public static HostEnvironment Environment(string dataDirectory, ICertificateSource certificates, IDesktop desktop,
-        TimeProvider? clock = null, string? webRoot = null) => new()
+        TimeProvider? clock = null, string? webRoot = null,
+        Func<string, Task<AwayVerdict>>? checkAway = null, Func<Task<bool>>? awayListening = null) => new()
     {
+        CheckAway = checkAway ?? (_ => Task.FromResult(AwayVerdict.Working)),
+        AwayListening = awayListening ?? (() => Task.FromResult(true)),
         DataDirectory = dataDirectory,
         WebRoot = webRoot ?? FindWebRoot(),
         Certificates = certificates,
@@ -74,7 +84,10 @@ public sealed class TestRuntime : IAsyncDisposable
 
     public TestRuntime(TimeProvider? clock = null, string? webRoot = null)
     {
-        Runtime = new HostRuntime(Environment(DataDirectory, Certificates, Desktop, clock, webRoot));
+        Runtime = new HostRuntime(Environment(DataDirectory, Certificates, Desktop, clock, webRoot,
+            checkAway: _ => { Interlocked.Increment(ref AwayAsked); return Task.FromResult(AwayAnswer); },
+            awayListening: () => { Interlocked.Increment(ref AwayLooked); return Task.FromResult(AwayStillListening); }));
+        Runtime.AwayChanged += () => Record("away:" + Runtime.Away);
         Runtime.StatusChanged += () => Record("status:" + Runtime.Status.Phase);
         Runtime.NoticeAdded += line => Record("notice:" + line.Message);
         Runtime.PairingCodeChanged += () => Record("code:" + Runtime.PairingCode.State);

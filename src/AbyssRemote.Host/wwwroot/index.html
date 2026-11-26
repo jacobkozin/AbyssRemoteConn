@@ -54,19 +54,23 @@
         <img class="hero-icon" src="/icon-192.png" alt="" width="64" height="64">
         <h1>Pair this device</h1>
         <p>Enter the eight-digit code shown in the Abyss Remote window on your PC. A code works once and for a few minutes; click <strong>New code</strong> there if yours has run out.</p>
+        <!-- pairing.js shows what fits where the page is opened: at home or at the away address. -->
+        <p id="pairAnywhere" class="hidden">This address works at home and away from home.</p>
+        <p id="pairIconHint" class="footnote hidden"><strong>Want an icon on your Home Screen?</strong> Add this page to it first (the Share button, then Add to Home Screen) and pair in the icon. An icon keeps its own sign-in.</p>
+        <p id="pairIconAwayHint" class="footnote hidden"><strong>Want an icon on your Home Screen?</strong> Make it from <a id="pairIconAwayLink" href="/"></a>, which works at home and away: open that address, add it to the Home Screen (the Share button, then Add to Home Screen) and pair in the icon.</p>
         <form id="pairForm">
           <label for="deviceName">Name for this device</label>
           <input id="deviceName" maxlength="60" required autocomplete="off" enterkeyhint="next">
           <label for="pairCode">Pairing code</label>
           <input id="pairCode" type="text" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" placeholder="••••••••" autocomplete="one-time-code" autocapitalize="none" autocorrect="off" enterkeyhint="go" required>
           <label id="pairAwayRow" class="check-row hidden">
-            <input id="pairAway" type="checkbox">
+            <input id="pairAway" type="checkbox" checked>
             <span>Also use this device away from home<small>After pairing, it moves on to an address that works at home and away.</small></span>
           </label>
           <button id="pairSubmit" class="button primary" type="submit">Pair this device</button>
         </form>
         <div id="pairError" class="error" role="alert"></div>
-        <details class="help">
+        <details id="pairCertHelp" class="help">
           <summary>First time on this phone or tablet?</summary>
           <p>An iPhone or iPad has to trust this PC's Abyss Remote certificate once. Until it does, Safari warns about this page and the picture does not connect.</p>
           <ol>
@@ -76,28 +80,7 @@
           </ol>
           <p>Before you turn on trust, compare the certificate's fingerprint on this device with the one in the Abyss Remote window on the PC. They must be the same.</p>
         </details>
-        <p class="footnote">Only pair devices you control. Never share the code or port-forward this PC.</p>
-      </div>
-    </section>
-    <section id="awayView" class="pair-view hidden">
-      <div class="pair-card">
-        <img class="hero-icon" src="/icon-192.png" alt="" width="64" height="64">
-        <h1>Add this device</h1>
-        <p>This address works at home and away from home. To add this device, you need an away code from your PC:</p>
-        <ol class="steps">
-          <li>On the PC, in the Abyss Remote window, click <strong>Show away code</strong>.</li>
-          <li>Type the code here and tap <strong>Add this device</strong>.</li>
-        </ol>
-        <p id="awayIconHint" class="footnote hidden"><strong>Want an icon on your Home Screen?</strong> Add this page to it first (the Share button, then Add to Home Screen) and type the code in the icon. An icon keeps its own sign-in.</p>
-        <form id="awayForm">
-          <label for="awayName">Name for this device</label>
-          <input id="awayName" maxlength="60" required autocomplete="off" enterkeyhint="next">
-          <label for="awayCode">Away code</label>
-          <input id="awayCode" type="text" maxlength="16" placeholder="ABCD-EFGH-JKLM" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go" required>
-          <button id="awaySubmit" class="button primary" type="submit">Add this device</button>
-        </form>
-        <div id="awayError" class="error" role="alert"></div>
-        <p class="footnote">Only add devices you control. A code works once, for 10 minutes.</p>
+        <p class="footnote">Only pair devices you control. Never share the code<span id="pairForwardNote"> or port-forward this PC</span>.</p>
       </div>
     </section>
     <section id="homeView" class="home hidden" aria-label="Home">

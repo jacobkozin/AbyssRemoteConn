@@ -4,7 +4,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { check, finish, loadModules, pretendPage, web } from './check.mjs';
 
-const [{ pairCodeFromHash, guessDeviceName, initPairing }] = await loadModules('pairing.js');
+const [{ pairCodeFromHash, guessDeviceName, initPairing, pairingLayout, arrangePairing }] = await loadModules('pairing.js');
 
 check('a QR-code address hands over its eight digits', () => {
   assert.equal(pairCodeFromHash('#pair=12345678'), '12345678');
@@ -59,6 +59,72 @@ check('the suggested name is one the PC accepts (60 characters at most)', () => 
   initPairing({ onPaired() {} });
   assert.equal(page.elements.deviceName.value, 'My iPhone');
   assert.ok(page.elements.deviceName.value.length <= 60);
+});
+
+check('at home, without an away address, the screen is the plain one', () => {
+  assert.deepEqual(pairingLayout(), { anywhere: false, certificateHelp: true, awaySwitch: false, iconHint: false, iconAwayHint: false });
+});
+
+check('at home, with an away address that works, the switch is offered', () => {
+  const layout = pairingLayout({ offered: true });
+  assert.equal(layout.awaySwitch, true);
+  assert.equal(layout.certificateHelp, true, 'the home address still needs its certificate');
+});
+
+check('at the away address there is no certificate to trust and nowhere to move on to', () => {
+  const layout = pairingLayout({ away: true, offered: true });
+  assert.equal(layout.anywhere, true);
+  assert.equal(layout.certificateHelp, false);
+  assert.equal(layout.awaySwitch, false);
+});
+
+check('Safari on an iPhone is told to make the icon first, from the address that works everywhere', () => {
+  assert.equal(pairingLayout({ away: true, offered: true, apple: true }).iconHint, true, 'at the away address: from this page');
+  assert.equal(pairingLayout({ apple: true }).iconHint, true, 'at home without an away address: from this page');
+  const home = pairingLayout({ offered: true, apple: true });
+  assert.equal(home.iconHint, false);
+  assert.equal(home.iconAwayHint, true, 'at home with one: from the away address');
+  assert.equal(pairingLayout({ offered: true }).iconAwayHint, false, 'other devices are not bothered with it');
+});
+
+check('an icon on the Home Screen gets no hint about icons and no switch it could not follow', () => {
+  for (const where of [{}, { offered: true }, { away: true, offered: true }]) {
+    const layout = pairingLayout({ ...where, apple: true, icon: true });
+    assert.equal(layout.iconHint, false);
+    assert.equal(layout.iconAwayHint, false);
+    assert.equal(layout.awaySwitch, false);
+  }
+});
+
+check('the screen shows and hides its parts to match', () => {
+  const hidden = (page, id) => page.elements[id].classList.contains('hidden');
+  let page = pretendPage();
+  arrangePairing({ offered: true });
+  assert.equal(hidden(page, 'pairAwayRow'), false);
+  assert.equal(hidden(page, 'pairCertHelp'), false);
+  assert.equal(hidden(page, 'pairAnywhere'), true);
+  assert.equal(hidden(page, 'pairIconHint'), true);
+  assert.equal(hidden(page, 'pairIconAwayHint'), true);
+
+  page = pretendPage();
+  arrangePairing({ away: true, offered: true, apple: true });
+  assert.equal(hidden(page, 'pairAwayRow'), true);
+  assert.equal(hidden(page, 'pairCertHelp'), true);
+  assert.equal(hidden(page, 'pairForwardNote'), true);
+  assert.equal(hidden(page, 'pairAnywhere'), false);
+  assert.equal(hidden(page, 'pairIconHint'), false);
+});
+
+check('the hint for an iPhone at home links to the away address by name', () => {
+  const page = pretendPage({ platform: 'iPhone', touchPoints: 5 });
+  arrangePairing({ offered: true, apple: true }, 'https://remote.example.org');
+  assert.equal(page.elements.pairIconAwayLink.href, 'https://remote.example.org');
+  assert.equal(page.elements.pairIconAwayLink.textContent, 'remote.example.org');
+});
+
+check('the switch for away from home is on unless someone turns it off', () => {
+  const html = fs.readFileSync(path.join(web, 'index.html'), 'utf8');
+  assert.match(html, /<input id="pairAway" type="checkbox" checked>/);
 });
 
 finish('pairing');

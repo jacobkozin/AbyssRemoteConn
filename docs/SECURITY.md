@@ -19,9 +19,9 @@ cookies, certificates, logs or network addresses.
 Defended against:
 
 - **Anyone on the internet, while away access is on (1.2).** They can only reach the away
-  address through your reverse proxy. It only lets in a device's away key. A device gets one
-  with a one-time away code that the window shows on request, or by bringing a code of its
-  own from home; the pairing code never works there.
+  address through your reverse proxy. It lets in a device's away key, and the one-time
+  pairing code while one is valid: eight digits, ten minutes, twenty wrong tries in total.
+  No code exists unless someone at the PC asked for one.
 
 - **Other devices on the same network** that try to pair, guess codes, or use the API without
   a session.
@@ -44,7 +44,7 @@ someone who controls your Wi-Fi equipment; denial of service by a device you pai
 | TLS | TLS 1.2/1.3 only, server certificate from a private root CA, keys non-exportable in the Windows user store; reissued from the same root when near expiry or when the LAN address changed | `HostCertificates` | smoke test (pinned), `CertificateCoverage…` |
 | Root certificate download | `/AbyssRemote-RootCA.cer` needs no pairing, so a phone can fetch it before it trusts the host. It is the public certificate only, never the private key; GET only; still behind the `Host` check | `AbyssServer` | `AnyoneCanDownloadThePublicRootCertificate`, `TheDownloadIsReadOnlyAndStillBehindTheHostCheck`, smoke test |
 | DNS rebinding | Unknown `Host` headers get 421 | `RequestProtection.KnownHost` | integration + smoke test |
-| Pairing code | 8 digits from a CSPRNG, shown only in the Abyss Remote window (and its QR code), 10 minutes, single use, constant-time comparison. A used, expired or locked code is no longer shown. A hidden start (`--minimized`) makes no code until someone asks for one | `PairingManager`, `HostRuntime`, `WindowApp` | `PairingManagerTests`, `PairingRaisesEventsAndUsesUpTheCode`, `TheAppStartsHiddenServesAndQuitsCleanly` |
+| Pairing code | 8 digits from a CSPRNG, shown only in the Abyss Remote window (and its QR code), 10 minutes, single use, constant-time comparison. A used, expired or locked code is no longer shown. A hidden start (`--minimized`) makes no code until someone asks for one, and neither does any start with away access on | `PairingManager`, `HostRuntime`, `WindowApp` | `PairingManagerTests`, `PairingRaisesEventsAndUsesUpTheCode`, `TheAppStartsHiddenServesAndQuitsCleanly` |
 | QR code | The code travels in the address's fragment (`#pair=`), which a browser never sends in a request. The page moves it into the pairing form and removes it from the address bar and history at once | `PairingCode.PairingUrl`, `pairing.js` | `ThePairingCodeIsShownInTwoGroupsAndGoesIntoTheQrAddress`, `tests/web/pairing-checks.mjs` |
 | Brute force | 5 tries per address per 5 minutes, and the code is destroyed after 20 wrong tries in total (any mix of addresses), so at most 20 guesses out of 100,000,000 | `PairingManager` | `TwentyWrongGuesses…` |
 | Session | 256-bit random secret; cookie `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`; only the SHA-256 hash is stored; constant-time check; 30-day lifetime; expired devices pruned | `StateStore` | `StateStoreTests`, `PairingSetsAHardenedSessionCookie` |
@@ -76,30 +76,37 @@ is and is not exposed. Away access is off by default.
   (`X-Forwarded-For` or `Forwarded`), and the connection comes from loopback. The away
   address without them, and proxy headers with any other name, get 421, so an away request
   can never pass as a home one. Away requests get `Strict-Transport-Security`.
-- **The pairing code never works there.** The away address refuses the eight-digit pairing
-  code, which stays usable at home, and the root-certificate download. Typing the pairing
-  code there is explained and not counted as a wrong guess.
-- **A device is added there with an away code from the window.** "Show away code" makes one
-  and shows it in a box of its own, with the address and a QR code. Typed at the away address
-  together with a name, it adds a new device. This is the one way a device gets in without
-  ever having been on the home network, so the code is handled with care: it is on screen
-  only while that box is open, closing the box cancels a code nobody used, and its use is
-  written to the activity list with the device's address and announced by the tray icon.
-  **Whoever sees the code while it is valid can use it, once, from anywhere.** Do not open
-  the box while the screen is shared, streamed or watched.
+- **The pairing code works there.** The away address takes the same eight-digit, one-time
+  code as the home address, with the same limits: valid ten minutes, five tries per address
+  in five minutes (away, the address is the one the proxy reports), and twenty wrong tries in
+  total destroy the code. That leaves someone guessing from the internet a chance of at most
+  20 in 100 million per code. This is the one way a device gets in without ever having been
+  on the home network, so with away access on a code exists on request only: the window
+  makes none when it starts, and turning away access on drops the code that is on screen. A
+  pairing is written to the activity list with the device's address and announced by the
+  tray icon. **Whoever sees the code while it is valid can use it, once, from anywhere.** Do
+  not make a code while the screen is shared, streamed or watched. The root-certificate
+  download is refused at the away address.
 - **A device paired at home can take itself there.** It asks for a one-time code for itself
   (from home only, with its cookie, Origin and CSRF token) and opens the away address with
-  it. That is the switch "Also use this device away from home" on the pairing screen and the
-  button on the home screen. A code from the window cannot be used through that link.
+  it. That is the switch "Also use this device away from home" on the pairing screen, which
+  is on unless someone turns it off, and the button on the home screen.
 - **A separate key per device.** Either way the browser at the away address gets an away
   key, stored as a hash next to the home one. A home key never works away and an away key
   never works at home, so a cookie copied off a device at home is no use from the internet.
-  A device added with the window's code has no usable home key.
-- **The codes.** Twelve characters from 32 (2^60 possibilities), valid ten minutes, single
-  use, compared in constant time. The window has one open code at a time, and so has each
-  device. Twenty wrong tries in total destroy every open code. A code travels in the URL
-  fragment (the QR code, the hand-over link), so it is never in a request line or a proxy
-  log.
+  A device that was paired at the away address has no usable home key.
+- **The hand-over codes.** Twelve characters from 32 (2^60 possibilities), valid ten minutes,
+  single use, compared in constant time, one open code per device. Twenty wrong tries in
+  total destroy every open code. Codes travel in the URL fragment (the hand-over link, and
+  the pairing code in the QR code), so they are never in a request line or a proxy log.
+- **Whether the address works.** The proxy is another program, and it may not be running.
+  Abyss Remote asks the away address on the PC itself whether it leads here: a connection to
+  loopback port 443 under the address's name, with the certificate checked the way a browser
+  checks it. It does so at its start and every half minute. While the address works, most
+  rounds only look whether something listens there, and ask through it every ten minutes.
+  While the address does not work, no browser is sent to it and no hand-over code is given
+  out. This makes nothing safer; it keeps devices from failing without a word. It cannot see
+  whether the address reaches the PC from outside.
 - **Taking it back.** Revoking a device or signing it out ends both keys and closes its
   sockets. Turning the setting off clears every away key on the next start, so devices have
   to be set up again after it is turned back on.
@@ -191,10 +198,12 @@ Big Picture have only been run against stand-ins.
 
 ## Known risks and limitations
 
-- **Away access puts a full-control login on the internet.** Only an away key gets in, but a
-  lost or stolen device that was set up works from anywhere until you revoke it in the window.
-  There is still no MFA. Anyone can make the twenty wrong guesses that destroy the open away
-  codes; ask for a new code at home.
+- **Away access puts a full-control login on the internet.** A device's away key gets in,
+  and so does the pairing code while one is valid. A lost or stolen device that was paired
+  works from anywhere until you revoke it in the window. There is still no MFA. The limit per
+  address relies on the proxy reporting each visitor's real address; the limit of twenty
+  wrong tries per code does not. Anyone can make those twenty wrong guesses and so destroy a
+  code before it is used; make a new one.
 - **The proxy is trusted.** A proxy that sent away traffic with another `Host`, dropped
   `X-Forwarded-For`, or skipped the certificate check would weaken these rules. Abyss Remote
   refuses proxy headers for any name other than the away address, so a misconfigured proxy is

@@ -5,8 +5,8 @@
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D4.svg)](https://www.microsoft.com/windows)
 
 Abyss Remote lets a phone, tablet or second computer see and control a Windows PC from a
-browser, over your own home network (and, since 1.2, away from home for devices you added
-there, through a reverse proxy on the same PC). On the PC it is a normal Windows app with a window and a
+browser, over your own home network (and, since 1.2, away from home, through a reverse proxy
+on the same PC). On the PC it is a normal Windows app with a window and a
 tray icon. On the other device it is a web page, so there is nothing to install there. It has
 two ways to stream:
 
@@ -19,9 +19,10 @@ two ways to stream:
 Everything runs on your PC: no account, no cloud relay, no telemetry, no third-party code.
 
 > **Security warning:** this is for trusted private networks. Never port-forward it. Away from
-> home only works through your own HTTPS reverse proxy on the same PC, and a device gets onto
-> that address only with a one-time away code from the window, or from home. Read
-> [Security](docs/SECURITY.md) before turning on home-network mode or away access.
+> home only works through your own HTTPS reverse proxy on the same PC. While away access is
+> on, the one-time pairing code also works at that public address, so make a code only when
+> you are pairing a device. Read [Security](docs/SECURITY.md) before turning on home-network
+> mode or away access.
 
 ## Status
 
@@ -52,12 +53,14 @@ the [changelog](CHANGELOG.md)) were checked on 2026-11-17 with 424 automated tes
 skipped), the eleven browser check files, and in a phone-sized Chromium with emulated touches
 against the demo server.
 
-Away access (1.2) was checked on 2026-11-23 with 443 automated tests (2 skipped) and twelve
-browser check files, and end to end in a phone-sized headless Chrome against the demo server
-through a test Caddy with the same proxy settings as the Gaming Hub's. A browser that was
-never set up got the away screen, pairing and the root certificate were refused there, a
-device paired at home set itself up and opened its home screen away, a stream ran through the
-proxy, and a used code was refused. Not tried yet: a real phone on mobile data.
+Away access (1.2) was first checked on 2026-11-23, end to end in a phone-sized headless Chrome
+against the demo server through a test Caddy with the same proxy settings as the Gaming
+Hub's; a stream ran through that proxy. Pairing at the away address, as it works now, was
+checked on 2026-11-26 with 458 automated tests (2 more are skipped) and twelve browser
+check files, and in a phone-sized Chromium against the demo server through a stand-in for the
+proxy: a device paired at the away address with the window's code, a device paired at home
+moved on to the away address by itself, and with the proxy "closed" no browser was sent
+there. Not tried yet: a real phone on mobile data.
 
 **Not tested yet, or not in any systematic way:**
 
@@ -229,39 +232,52 @@ install the profile after the download, send the saved file to the device instea
 
 ### Use it away from home
 
-Since 1.2, the devices you already added can use Abyss Remote from anywhere, through a public
-HTTPS address that a reverse proxy on the same PC forwards to it. Abyss Remote opens nothing
-to the internet itself and has no relay: you need a proxy with a public name and a real
-certificate. On the development PC that is the Gaming Hub's Caddy, at `remote.<hub address>`.
-The proxy must forward to `https://127.0.0.1:8444`, keep the browser's `Host` header, add
-`X-Forwarded-For`, and check Abyss Remote's certificate against its root certificate (see
+Since 1.2, devices can use Abyss Remote from anywhere, through a public HTTPS address that a
+reverse proxy on the same PC forwards to it. Abyss Remote opens nothing to the internet
+itself and has no relay: you need a proxy with a public name and a real certificate. On the
+development PC that is the Gaming Hub's Caddy, at `remote.<hub address>`. The proxy must
+forward to `https://127.0.0.1:8444`, keep the browser's `Host` header, add `X-Forwarded-For`,
+and check Abyss Remote's certificate against its root certificate (see
 [Security](docs/SECURITY.md#what-12-added) for the exact settings).
+
+**The proxy has to be running.** It is another program, and the away address only works
+while it runs. Abyss Remote asks the address on the PC itself, at its start and every half
+minute, whether it leads to Abyss Remote, and says so: in the window (Connect and Phone
+setup), in the activity list, and from the tray icon when the address stops working. That
+check cannot see whether the address reaches the PC from outside, which also depends on your
+router and on the address's name.
 
 1. In the window, under Settings, type the away address (for example
    `remote.example.duckdns.org`), click **Apply**, and turn on **Let added devices connect
    away from home**. The first time, it explains what that means and asks you to confirm.
-2. In the window, under Connect, click **Show away code**. A box shows the away address, a
-   QR code and a one-time code. It works once, for 10 minutes, and closing the box cancels
-   it.
-3. On the phone, tablet or computer: open the away address (or scan the QR code with the
-   camera), give the device a name, type the code and tap **Add this device**. That is all.
-   The away address works at home too, so the device needs no other address, and it needs
-   no certificate.
+2. While the away address works, the Connect card shows it as the address to open, and the
+   QR code points to it. Click **New code**.
+3. On the phone, tablet or computer: scan the QR code, or open the away address and type the
+   code, and tap **Pair this device**. That is all. The away address works at home too, so
+   the device needs no other address, and it needs no certificate.
+
+Pairing there is the same as pairing at home: the same eight-digit code, once, for ten
+minutes. With away access on, the window makes no code by itself. One exists only after
+someone clicked **New code**.
 
 On an iPhone or iPad, an icon on the Home Screen keeps its own sign-in. Make the icon first
-(open the away address in Safari, then Share and Add to Home Screen) and type the code in the
-icon.
+(open the away address in Safari, then Share and Add to Home Screen) and pair in the icon.
+The pairing screen says so there.
 
-A device that pairs at home in the usual way can switch on **Also use this device away from
-home** on the pairing screen. After pairing, the browser goes on to the away address by
-itself and is signed in there too. A browser that is already paired at home has the same as
-a button on its home screen, **Turn on away access**.
+A device that opens the home address instead gets the same result. Its pairing screen has a
+switch, **Also use this device away from home**, which is on unless you turn it off: after
+pairing, the browser goes on to the away address by itself and is signed in there too. A
+browser that was paired before has the same as a button on its home screen, **Turn on away
+access**.
 
-The pairing code never works at the away address. Whoever sees an away code while it is valid
-can use it, once, from anywhere, so do not open that box while your screen is shared or
-streamed. Revoking a device ends its access at home and away at once, and turning the setting
-off signs every device out of the away address. The window's Devices list shows which
-devices have away access.
+At home, the home address is the direct way to the PC. The away address goes out to your
+router and back in through the proxy. That works on routers that let a device inside reach
+the router's own public address; some do not.
+
+Whoever sees a pairing code while it is valid can use it once, and with away access on from
+anywhere. Do not make a code while your screen is shared or streamed. Revoking a device ends
+its access at home and away at once, and turning the setting off signs every device out of
+the away address. The window's Devices list shows which devices have away access.
 
 All of this was tried in a phone-sized Chromium against the demo server, through a stand-in
 for the proxy. It has not been tried on a real phone yet.
@@ -366,9 +382,9 @@ needs that cookie, the exact Origin and a per-device CSRF token. Revoking a devi
 it immediately. File transfer is limited to one folder, the PC actions are a fixed list of
 two, and a Steam game can only be started by the number of an installed game. Away access
 (1.2) is off by default; when it is on, only requests through a proxy on this PC for the away
-address count as away, the pairing code never works there, and a device gets its separate
-away key only with a one-time away code that the window shows on request, or by bringing a
-code of its own from home. Details, the
+address count as away, the one-time pairing code works there as it does at home (so the
+window makes no code until someone asks for one), and a device has a separate key for that
+address. Details, the
 R3.3 issues fixed in 1.0, what 1.1 added and the known limits are in
 [docs/SECURITY.md](docs/SECURITY.md).
 
@@ -400,7 +416,7 @@ R3.3 issues fixed in 1.0, what 1.1 added and the known limits are in
 ## Known limitations
 
 - No relay or NAT traversal. Away access needs your own HTTPS reverse proxy with a public
-  address on the same PC.
+  address on the same PC, and only works while that proxy is running.
 - Video and audio travel over TCP (WebSockets), so Wi-Fi packet loss shows up as short stalls
   rather than glitches. A native app like Moonlight (UDP) can do better on poor Wi-Fi.
 - No HDR, H.265 or AV1. Rotated monitors are not handled in Game mode.

@@ -26,11 +26,19 @@ export async function loadModules(...names) {
  *  Returns what the code under test did to it. */
 export function pretendPage({ hash = '', platform = '', touchPoints = 0 } = {}) {
   const page = { elements: {}, replaced: [] };
-  const element = () => ({
-    value: '', textContent: '', disabled: false, listeners: {},
-    classList: { add() {}, remove() {}, toggle() {} },
-    addEventListener(type, handler) { this.listeners[type] = handler; },
-  });
+  const element = () => {
+    const classes = new Set();
+    return {
+      value: '', textContent: '', disabled: false, checked: false, listeners: {},
+      classList: {
+        add: (...names) => names.forEach((name) => classes.add(name)),
+        remove: (...names) => names.forEach((name) => classes.delete(name)),
+        toggle(name, on = !classes.has(name)) { if (on) classes.add(name); else classes.delete(name); return on; },
+        contains: (name) => classes.has(name),
+      },
+      addEventListener(type, handler) { this.listeners[type] = handler; },
+    };
+  };
   const define = (name, value) => Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
   define('document', { getElementById: (id) => (page.elements[id] ??= element()) });
   define('location', { hash, pathname: '/' });

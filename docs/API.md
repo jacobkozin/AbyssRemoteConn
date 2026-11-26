@@ -19,8 +19,8 @@ unknown fields; new behavior that would break existing clients belongs under a n
    `abyss_remote_session` (`Secure; HttpOnly; SameSite=Strict; Path=/`, 30 days).
 3. `GET /api/v1/me` returns `{ id, device, csrf, version, features: { gameMode }, away }`.
    The CSRF token changes every time the host starts; fetch it again after reconnecting.
-   `away` is `{ available, url, here, ready }`: the PC allows away access, its address, this
-   request came that way, and this device has its away key.
+   `away` is `{ available, url, here, ready }`: the PC has an away address that works right
+   now, the address, this request came that way, and this device has its away key.
 4. State-changing requests send header `X-Abyss-CSRF: <csrf>` and a matching `Origin`. The
    browser client repeats a refused change once after fetching `/api/v1/me` again.
 5. Every WebSocket requests the subprotocols `abyss-v1, <csrf>` and needs the cookie and a
@@ -36,11 +36,11 @@ answer is 403. Both have an empty body, and so do most 404 answers. Other errors
 
 | Route | Needs | Result |
 | --- | --- | --- |
-| `GET /api/v1/info` | nothing | `{ app, version, away, awayAvailable }` (`away`: true at the away address; `awayAvailable`: the PC has one) |
+| `GET /api/v1/info` | nothing | `{ app, version, away, awayAvailable, awayUrl }` (`away`: true at the away address; `awayAvailable`: the PC has an away address and it works right now; `awayUrl`: that address, otherwise null) |
 | `GET /AbyssRemote-RootCA.cer` | nothing | The root certificate's public part, as a download. 404 at the away address |
-| `POST /api/v1/pair` | Origin | Body `{ code, label }`. `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries. At the away address `code` must be an away code from the window, and the cookie holds an away key |
-| `POST /api/v1/away/code` | cookie + Origin + CSRF, at home | `{ code, url, address, expiresUtc }`: a one-time away code for this device. 409 while away access is off, 403 at the away address |
-| `POST /api/v1/away/redeem` | Origin, at the away address | Body `{ code }`: the code a device asked for at home. `{ ready, paired, name }`, sets the away cookie. 400 wrong, expired or locked (also for a code from the window, which needs a name); 404 at home |
+| `POST /api/v1/pair` | Origin | Body `{ code, label }`. `{ paired, name }`, sets the cookie. 400 wrong/expired, 429 too many tries. The same code works at the away address; there the cookie holds the device's away key |
+| `POST /api/v1/away/code` | cookie + Origin + CSRF, at home | `{ code, url, address, expiresUtc }`: a one-time code that takes this device to the away address. 409 while away access is off or the away address does not work, 403 at the away address |
+| `POST /api/v1/away/redeem` | Origin, at the away address | Body `{ code }`: the code a device asked for at home. `{ ready, name }`, sets the away cookie. 400 wrong, expired or locked; 404 at home |
 | `GET /api/v1/me` | cookie | `{ id, device, csrf, version, features }` |
 | `GET /api/v1/displays` | cookie | `[{ id, name, x, y, width, height, primary, friendlyName, refreshHz, scale }]` in physical pixels |
 | `GET /api/v1/displays/{id}/preview?width=` | cookie | JPEG still of one monitor, 160–960 px wide (default 480). 404, 503 |
@@ -74,13 +74,14 @@ While away access is on, a reverse proxy on the PC forwards the away address to 
 request counts as away when its `Host` is that address, it has `X-Forwarded-For` or
 `Forwarded`, and it comes from loopback; otherwise proxy headers mean 421. At the away
 address the session cookie must hold the device's away key, not its home key. The same
-cookie name is used; the browser keeps one per address. There are two ways to get one. The
-window makes an away code on request ("Show away code"); `POST /api/v1/pair` at the away
-address with that code and a name adds a new device. And a device paired at home asks for a
-code of its own with `POST /api/v1/away/code` and uses it with `POST /api/v1/away/redeem`. A
-code is twelve characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-EFGH-JKLM`;
-spaces, dashes and small letters are ignored. The window's QR code carries its code as
-`#pair=<code>`, and the link in `url` carries a device's own as `#away=<code>`.
+cookie name is used; the browser keeps one per address. There are two ways to get one.
+`POST /api/v1/pair` at the away address, with the pairing code the window shows, pairs a new
+device there. And a device paired at home asks for a code of its own with
+`POST /api/v1/away/code` and uses it with `POST /api/v1/away/redeem`. Such a code is twelve
+characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-EFGH-JKLM`; spaces, dashes
+and small letters are ignored, and the link in `url` carries it as `#away=<code>`. While the
+away address does not work (the proxy is not running), `awayAvailable` and `away.available`
+are false for requests at home and no code is given out.
 
 ### Root certificate: `GET /AbyssRemote-RootCA.cer`
 

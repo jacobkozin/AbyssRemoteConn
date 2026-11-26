@@ -204,6 +204,9 @@ public sealed class TestServer : IAsyncDisposable
     /// <summary>Away access as the server sees it, or null when the test server was started without it.</summary>
     public AwayAccess? Away { get; }
 
+    /// <summary>False pretends that the proxy on the PC is not running, so the away address does not work.</summary>
+    public bool AwayForwarded { get; set; } = true;
+
     private TestServer(string? awayHost)
     {
         Away = awayHost is null ? null : new AwayAccess(awayHost);
@@ -219,6 +222,7 @@ public sealed class TestServer : IAsyncDisposable
             Pairing = Pairing,
             Protection = new RequestProtection(["127.0.0.1", "localhost"]),
             Away = Away,
+            AwayWorks = () => AwayForwarded,
             Sessions = Sessions,
             Desktop = Desktop,
             Clipboard = Clipboard,

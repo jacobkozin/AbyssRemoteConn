@@ -30,6 +30,13 @@ public sealed class HostEnvironment
 
     public TimeProvider Clock { get; init; } = TimeProvider.System;
 
+    /// <summary>Asks whether the away address (a host name) is forwarded to this program right
+    /// now. Tests answer for themselves instead of looking for a proxy on this PC.</summary>
+    public Func<string, Task<AwayVerdict>> CheckAway { get; init; } = host => AwayProbe.CheckAsync(host);
+
+    /// <summary>The cheap look in between: does the proxy on this PC still listen?</summary>
+    public Func<Task<bool>> AwayListening { get; init; } = () => AwayProbe.ListeningAsync();
+
     /// <summary>Print the web server's warnings and errors to the console (console mode only).</summary>
     public bool ConsoleLogging { get; init; }
 

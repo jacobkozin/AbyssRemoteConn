@@ -48,6 +48,11 @@ public sealed record RunningHost(
     /// home-network mode, otherwise the one for this PC.</summary>
     public string MainUrl => LanUrls.Count > 0 ? LanUrls[0] : LocalUrl;
 
+    /// <summary>The address to show first, to copy and to put into the QR code. While the away
+    /// address works it is that one: it works at home and away, and a device needs no
+    /// certificate for it. Otherwise it is <see cref="MainUrl"/>.</summary>
+    public string AddressToGiveOut(AwayVerdict away) => away == AwayVerdict.Working && AwayUrl is not null ? AwayUrl : MainUrl;
+
     /// <summary>Where a phone can download the root certificate, or null in this-PC-only mode.</summary>
     public string? RootCertificateUrl => LanUrls.Count > 0 ? LanUrls[0] + "/AbyssRemote-RootCA.cer" : null;
 }
@@ -91,10 +96,6 @@ public sealed record PairingCode(PairingCodeState State, string Digits, DateTime
 /// <summary>A paired device, as the window lists it (the same fields /api/v1/devices returns).
 /// <paramref name="Away"/>: it is set up for away access.</summary>
 public sealed record PairedDevice(string Id, string Name, DateTimeOffset CreatedUtc, DateTimeOffset LastSeenUtc, DateTimeOffset ExpiresUtc, bool Away = false);
-
-/// <summary>The away code the window shows on request (1.2): the code as people read it, the
-/// address that carries it (for the QR code), the away address, and when it runs out.</summary>
-public sealed record AwayCodeOffer(string Code, string Url, string Address, DateTimeOffset ExpiresUtc);
 
 /// <summary>One line of the activity list: a pairing, a revocation, a refused connection.</summary>
 public sealed record NoticeLine(DateTimeOffset Time, string Message);

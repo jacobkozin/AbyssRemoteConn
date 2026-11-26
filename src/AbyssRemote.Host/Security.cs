@@ -45,6 +45,12 @@ public sealed class PairingManager
         }
     }
 
+    /// <summary>Makes the current code useless without making a new one.</summary>
+    public void Clear()
+    {
+        lock (_sync) _pin = "";
+    }
+
     public PairingResult TryUse(string code, string address)
     {
         PairingResult result;

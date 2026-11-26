@@ -54,9 +54,9 @@ internal sealed class MainView : Control
     {
         _header.Show(state.Status);
         _problem.Show(state.Status.Problem);
-        _connect.Show(state.Status, state.Code, state.Now);
+        _connect.Show(state.Status, state.Code, state.Now, state.Away);
         _devices.Show(state.Devices, state.ConnectedDeviceIds, state.Now, awayOn: state.Status.Running?.AwayUrl is not null);
-        _setup.Show(state.Setup, state.Status);
+        _setup.Show(state.Setup, state.Status, state.Away);
         _settings.Show(state.Status, state.StartWithWindows, state.CloseToTray, state.AwayHost);
         _activity.Show(state.Notices);
         _problem.Visible = state.Status.Phase == HostPhase.Failed;
@@ -230,7 +230,7 @@ internal sealed class MainWindow : Form
 {
     // Logical pixels. The start size shows every card without scrolling in home-network mode
     // with away access and two devices, where the screen has the room.
-    private static readonly Size StartSize = new(1100, 1110), SmallestSize = new(600, 480);
+    private static readonly Size StartSize = new(1100, 1100), SmallestSize = new(600, 480);
     private bool _placed, _closeButtonUsed;
 
     public MainWindow(IWindowActions actions)

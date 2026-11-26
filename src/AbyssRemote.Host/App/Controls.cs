@@ -169,7 +169,6 @@ internal interface IWindowActions
 {
     void NewPairingCode();
     void CopyAddress();
-    void ShowAwayCode();
     void RevokeDevice(PairedDevice device);
     void RevokeAllDevices();
     void TryAgain();
@@ -188,7 +187,8 @@ internal interface IWindowActions
 /// <summary>Everything the window shows, as plain data. WindowApp builds one from the runtime
 /// and the settings whenever something changes; the snapshot tool builds them from samples.
 /// <paramref name="AwayHost"/> is the saved away address, which the settings card shows also
-/// while away access is off.</summary>
+/// while away access is off. <paramref name="Away"/> says whether that address is being
+/// forwarded to this program right now.</summary>
 internal sealed record WindowState(
     HostStatus Status,
     PairingCode Code,
@@ -199,7 +199,8 @@ internal sealed record WindowState(
     bool CloseToTray,
     bool StartWithWindows,
     DateTimeOffset Now,
-    string AwayHost = "");
+    string AwayHost = "",
+    AwayVerdict Away = AwayVerdict.Unknown);
 
 /// <summary>One walk over a card's content. The same code runs twice: once without a
 /// <see cref="Graphics"/> to measure the card and put its buttons in place, and once with one

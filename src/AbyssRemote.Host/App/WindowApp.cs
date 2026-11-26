@@ -81,7 +81,11 @@ internal sealed class WindowApp : IWindowActions
 
         _window = new MainWindow(this) { CloseToTray = _preferences.CloseToTray };
         _window.HiddenToTray += OnHiddenToTray;
-        _window.Activated += (_, _) => CheckSetup(onlyIfStale: true); // coming back from Windows Settings or a UAC prompt
+        _window.Activated += (_, _) =>
+        {
+            CheckSetup(onlyIfStale: true); // coming back from Windows Settings or a UAC prompt
+            _ = _runtime.CheckAwayAsync(thorough: false); // or from starting the web server that forwards the away address
+        };
         _window.FormClosed += (_, _) =>
         {
             _windowClosed = true;
@@ -94,9 +98,15 @@ internal sealed class WindowApp : IWindowActions
         _runtime.PairingCodeChanged += () => OnWindowThread(Refresh);
         _runtime.DevicesChanged += () => OnWindowThread(Refresh);
         _runtime.ConnectionsChanged += () => OnWindowThread(Refresh);
+        _runtime.AwayChanged += () => OnWindowThread(OnAwayChanged);
         _runtime.DevicePaired += device => OnWindowThread(() =>
             _tray.Tip("New device paired", $"“{device.Name}” can now see and control this PC."));
-        _clock.Tick += (_, _) => { if (_window.Visible) Refresh(); }; // the code's countdown, "5 minutes ago"
+        _clock.Tick += (_, _) =>
+        {
+            var away = _runtime.Away;
+            if (_awayDown.ShouldSpeak(away, DateTimeOffset.UtcNow)) _tray.Tip(AwayDownNotice.Title, AwayDownNotice.Text(away));
+            if (_window.Visible) Refresh(); // the code's countdown, "5 minutes ago"
+        };
         if (settingsNotice is not null) _runtime.AddNotice(settingsNotice);
     }
 
@@ -113,10 +123,15 @@ internal sealed class WindowApp : IWindowActions
         if (!startHidden) _window.ShowInFront();
         var status = await _runtime.StartAsync(_options);
         _options = _options with { RenewCertificate = false }; // --renew-cert applies to the first start only
-        // An open window is there to pair a device, so it gets a code. A hidden start (with
-        // Windows) makes none: no valid code exists until someone asks for one.
-        if (status.Phase == HostPhase.Running && !startHidden) _runtime.NewPairingCode();
+        if (MakesCodeAtStart(status, startHidden)) _runtime.NewPairingCode();
     }
+
+    /// <summary>An open window is there to pair a device, so it gets a code. A hidden start
+    /// (with Windows) makes none: no valid code exists until someone asks for one. Nor does a
+    /// start with away access on, where a code can be tried from anywhere: then a code only
+    /// exists after "New code" was clicked.</summary>
+    internal static bool MakesCodeAtStart(HostStatus status, bool startHidden) =>
+        status.Phase == HostPhase.Running && !startHidden && status.Running?.AwayUrl is null;
 
     /// <summary>Runs <paramref name="action"/> on the window's thread, from any thread.</summary>
     private void OnWindowThread(Action action) => _windowThread.Post(_ => { if (!_quitting) action(); }, null);
@@ -137,7 +152,7 @@ internal sealed class WindowApp : IWindowActions
         var status = _statusSeen ? _runtime.Status : new HostStatus(HostPhase.Starting, _options);
         var devices = _runtime.Devices;
         _window.View.Show(new WindowState(status, _runtime.PairingCode, devices, _runtime.ConnectedDeviceIds, _runtime.Notices,
-            _setup, _preferences.CloseToTray, _startWithWindows, DateTimeOffset.UtcNow, _preferences.AwayHost));
+            _setup, _preferences.CloseToTray, _startWithWindows, DateTimeOffset.UtcNow, _preferences.AwayHost, _runtime.Away));
         _tray.Show(status, devices.Count);
     }
 
@@ -196,22 +211,8 @@ internal sealed class WindowApp : IWindowActions
     public void CopyAddress()
     {
         if (_runtime.Status.Running is not { } running) return;
-        try { Clipboard.SetText(running.MainUrl); }
+        try { Clipboard.SetText(running.AddressToGiveOut(_runtime.Away)); }
         catch (ExternalException) { _runtime.AddNotice("The clipboard is busy. Copy the address again in a moment."); }
-    }
-
-    /// <summary>"Show away code": makes the code that adds a device at the away address and
-    /// shows it in a box of its own. Whoever sees that code can use it once from anywhere, so
-    /// it is only on screen while the box is open, and a code nobody used dies with the box.</summary>
-    public void ShowAwayCode()
-    {
-        if (_runtime.NewAwayCode() is not { } offer)
-        {
-            _runtime.AddNotice("There is no away code right now: Abyss Remote is not running with away access turned on.");
-            return;
-        }
-        AwayCodeDialog.Show(_window, _runtime, offer);
-        _runtime.CancelAwayCode();
     }
 
     public void RevokeDevice(PairedDevice device) => _runtime.RevokeDevice(device.Id);
@@ -279,7 +280,21 @@ internal sealed class WindowApp : IWindowActions
         catch (Win32Exception) { _runtime.AddNotice("Windows Settings could not be opened. Look under Settings > Network & internet."); }
     }
 
-    public void CheckSetupAgain() => CheckSetup(onlyIfStale: false);
+    public void CheckSetupAgain()
+    {
+        CheckSetup(onlyIfStale: false);
+        _ = _runtime.CheckAwayAsync();
+    }
+
+    private readonly AwayDownNotice _awayDown = new();
+
+    /// <summary>The away address started or stopped leading here. The window shows it at once;
+    /// the tray icon says it when it lasts (see <see cref="AwayDownNotice"/>).</summary>
+    private void OnAwayChanged()
+    {
+        Refresh();
+        _awayDown.Changed(_runtime.Away, _options.AwayHost is not null, DateTimeOffset.UtcNow);
+    }
 
     public async void SetHomeNetwork(bool on)
     {
@@ -313,14 +328,16 @@ internal sealed class WindowApp : IWindowActions
         }
         if (on && !_preferences.AwayExplained)
         {
-            string explanation = $"Devices you have already added will be able to use Abyss Remote from anywhere at https://{_preferences.AwayHost}, "
-                + "through the Gaming Hub on this PC. That address is on the internet: whoever has one of those devices can control this PC "
-                + "from anywhere until you revoke it. A device is added there with an away code, which this window only shows when you click "
-                + "“Show away code”. Whoever sees that code can use it once, so keep it to yourself.";
+            string explanation = $"Devices will be able to use Abyss Remote from anywhere at https://{_preferences.AwayHost}, "
+                + "through another web server on this PC (for example the Gaming Hub), which has to be running. That address is on the internet: "
+                + "whoever has a paired device can control this PC from anywhere until you revoke it, and a pairing code also works there. "
+                + "So a code is only made when you click “New code”. Keep it to yourself: whoever sees it can use it once.";
             if (!ConfirmDialog.Ask(_window, "Let added devices connect away from home?", explanation, "Turn on")) return;
         }
         Save(_preferences with { Away = on, AwayExplained = _preferences.AwayExplained || on });
         _options = _options with { AwayHost = on ? _preferences.AwayHost.Trim().ToLowerInvariant() : null };
+        // A code that is on screen was made for home. It must not turn into one for anywhere.
+        if (on) _runtime.DropPairingCode();
         await _runtime.RestartAsync(_options);
     }
 

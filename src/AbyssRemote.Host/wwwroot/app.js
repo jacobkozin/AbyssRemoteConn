@@ -15,8 +15,8 @@ import { TYPING_GUARD, keyCodeFor, typedText, typingChange } from './live-typing
 import { api, fetchFile, refreshIdentity, session } from './api.js';
 import { $, el, icon, saveBlob } from './dom.js';
 import { fileNameFromDisposition } from './format.js';
-import { initPairing, clearPairCode } from './pairing.js';
-import { goAway, initAwayView, isHomeScreenIcon, redeemAwayCode, takeAwayCodeFromAddress } from './away.js';
+import { arrangePairing, initPairing, clearPairCode } from './pairing.js';
+import { goAway, isHomeScreenIcon, isIphoneOrIpad, noteSetUpHere, redeemAwayCode, takeAwayCodeFromAddress } from './away.js';
 import { initHome, showHomeScreen, hideHomeScreen } from './home.js';
 import { createMonitorPicker, monitorLabel, pickMonitor } from './monitors.js';
 
@@ -106,7 +106,7 @@ function applySettings(saved) {
 
 // ---------------------------------------------------------------- views
 
-const views = { pair: $('pairView'), away: $('awayView'), home: $('homeView'), remote: $('remoteView') };
+const views = { pair: $('pairView'), home: $('homeView'), remote: $('remoteView') };
 function showView(name) {
   for (const [key, view] of Object.entries(views)) view.classList.toggle('hidden', key !== name);
 }
@@ -135,44 +135,34 @@ function showPair(error = '') {
   leaveStream();
   hideHomeScreen();
   session.csrf = null;
-  if (awayAddress) {
-    // At the away address a device is added with an away code from the PC, not with the pairing code.
-    showView('away');
-    $('awayError').textContent = /pair/i.test(error) ? AWAY_LOST : error;
-    setNetwork('Not added');
-    return;
-  }
   showView('pair');
   $('pairError').textContent = error;
   setNetwork('Not paired');
 }
 
-// True at the away address (the public one the Gaming Hub forwards to the PC), false at home,
-// null until the PC has said. /api/v1/info answers without a session.
+// True at the away address (the public one that a web server on the PC forwards here), false
+// at home, null until the PC has said. /api/v1/info answers without a session.
 let awayAddress = null;
-const AWAY_LOST = 'This device is not signed in here any more. Add it again with an away code from the PC.';
 async function learnAddress() {
   if (awayAddress !== null) return;
-  let offered = false; // the PC has an away address
-  try {
-    const info = await api('/api/v1/info');
-    awayAddress = Boolean(info.away);
-    offered = Boolean(info.awayAvailable);
-  } catch { /* not reachable: initialize says so */ }
-  // The switch on the pairing screen is for a browser at home that can go on to the away
-  // address by itself. An icon on an iPhone's Home Screen cannot (see away.js).
-  $('pairAwayRow').classList.toggle('hidden', !offered || awayAddress !== false || isHomeScreenIcon());
+  let info;
+  try { info = await api('/api/v1/info'); } catch { return; /* not reachable: initialize says so, and this is asked again */ }
+  awayAddress = Boolean(info.away);
+  arrangePairing({ away: awayAddress, offered: Boolean(info.awayAvailable), apple: isIphoneOrIpad(), icon: isHomeScreenIcon() }, info.awayUrl ?? '');
 }
 
-// After pairing at home. With "Also use this device away from home" switched on, the browser
-// goes on to the away address with a one-time code of its own and is signed in there too.
+// After pairing. At the away address this browser is done: that address works everywhere. At
+// home, with "Also use this device away from home" switched on (it is, unless someone turned
+// it off), the browser goes on to the away address with a one-time code of its own and is
+// signed in there too.
 async function afterPairing() {
-  if (!$('pairAwayRow').classList.contains('hidden') && $('pairAway').checked) {
+  if (awayAddress) noteSetUpHere();
+  else if (!$('pairAwayRow').classList.contains('hidden') && $('pairAway').checked) {
     try {
       await refreshIdentity();
       await goAway();
       return; // the page is leaving for the away address
-    } catch { /* away access went off meanwhile: the home screen says what is possible */ }
+    } catch { /* the away address stopped working meanwhile: the home screen says what is possible */ }
   }
   await initialize();
 }
@@ -209,7 +199,7 @@ async function initialize() {
   const awayCode = awayAddress ? takeAwayCodeFromAddress() : '';
   if (awayCode) {
     try { await redeemAwayCode(awayCode); }
-    catch (error) { showPair(''); $('awayError').textContent = error.message; return; }
+    catch (error) { showPair(error.message); return; }
   }
   try {
     await refreshIdentity();
@@ -1596,7 +1586,6 @@ applySettings(loadSettings());
 buildToggles();
 syncToggles();
 initPairing({ onPaired: afterPairing });
-initAwayView({ onReady: initialize });
 initHome({
   openStream,
   prepareSound,

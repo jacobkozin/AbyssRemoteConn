@@ -5,11 +5,11 @@
 - **Away from home.** A new setting, "Let added devices connect away from home", with an away
   address such as `remote.example.duckdns.org`. A reverse proxy on the same PC (on the
   development PC, the Gaming Hub's Caddy) forwards that public HTTPS address to Abyss Remote
-  over loopback. That address works at home too. A device gets onto it with a one-time away
-  code that the window shows on request, or by bringing a code of its own from home, and has
-  a separate away key there. The pairing code and the root certificate are refused at the
-  away address. Revoking a device ends both keys, and turning the setting off forgets every
-  away key. See [Security](docs/SECURITY.md#what-12-added).
+  over loopback. That address works at home too. A device pairs there with the same one-time
+  code as at home, or takes itself there from home with a code of its own, and has a separate
+  away key there. The root certificate is not offered at the away address. Revoking a device
+  ends both keys, and turning the setting off forgets every away key. See
+  [Security](docs/SECURITY.md#what-12-added).
 - **A new look for the browser client: the Abyss game style.** Ocean-coloured panels with one
   dark outline and a lip under everything that can be pressed; teal for the main action and
   for anything switched on, coral for what cannot be undone. Fixed along the way, on phones:
@@ -33,37 +33,52 @@
   - The Activity list has a scroll bar only while there is more than fits. It is scrolled
     to its newest line in a way that also works while the window is not on screen; the old
     way did nothing in a window that had not been shown yet.
-  - The window opens 100 pixels taller (1100 x 1040 at 100%), where the screen has the
+  - The window opens 160 pixels taller (1100 x 1100 at 100%), where the screen has the
     room. The lips and the space under the header made the cards a little taller, and with
-    away access and two devices everything is still visible without scrolling.
+    away access and three devices everything is still visible without scrolling.
   Checked in off-screen pictures at 100% and 150%, including hovered and pressed buttons, a
   long activity list and the single column of a narrow window, and by the layout tests at
   100, 125, 150 and 200%. The rebuilt program was started on the development PC, where the
   window opened with every card in place and no scroll bar.
 - The window lists which devices have away access, and the away address sits under the port
   in Settings.
-- **Adding a device for away access is one address and one code.** The first version made a
-  device set itself up from home in several steps, and nobody could tell what to click.
-  - The window has **Show away code** under Connect. A box shows the away address, a QR code
-    and a one-time code, for 10 minutes; closing it cancels a code nobody used.
-  - At the away address a device types a name and that code, and is added. The address works
-    at home too, so the device needs no other, and no certificate.
-  - The pairing screen at home has a switch, **Also use this device away from home**. With
-    it on, the browser goes on to the away address after pairing and is signed in there too.
-    A browser that is already paired has the same as one button on its home screen.
+- **Pairing is pairing, at home and away.** Away access first had a set-up of its own:
+  several steps on the device, then an away code from a box in the window. Now there is one
+  code and one screen.
+  - The eight-digit pairing code also works at the away address. A device that pairs there
+    is done: the address works at home too, and it needs no certificate.
+  - While the away address works, the window's Connect card shows it as the address to
+    open, and the QR code points to it.
+  - The pairing screen at home has a switch, **Also use this device away from home**, which
+    is on unless someone turns it off. After pairing, the browser goes on to the away
+    address and is signed in there too. A browser that was paired before has the same as
+    one button on its home screen.
   - An icon on an iPhone's or iPad's Home Screen keeps its own sign-in and cannot be sent to
-    another address, so it is told to make an icon from the away address and type the code
-    there.
+    another address, so the pairing screen says to make the icon first, from the away
+    address.
   - In the window, Devices shows "away access" or "no away access yet" for each device.
-  This changes who can add a device: an away code from the window adds one from anywhere,
-  once, for whoever sees it while it is valid. The pairing code still never works at the away
-  address. See [Security](docs/SECURITY.md#what-12-added).
+  This changes who can try a code. With away access on, anyone who knows the address can
+  guess at the pairing code while one is valid. Five tries per address in five minutes and
+  twenty wrong tries in total, after which the code is destroyed, leave a guess a chance of
+  at most 20 in 100 million per code. So with away access on the window makes no code when
+  it starts, and turning away access on drops the code that is on screen: a code exists only
+  after **New code** was clicked. See [Security](docs/SECURITY.md#what-12-added).
   Tried in Chromium at phone size and at 1280 px against the demo server, through a stand-in
   for the proxy and with a pretend Home Screen icon. Not on a real phone.
+- **Abyss Remote says when the away address does not work.** The address is forwarded by
+  another program on the PC, the reverse proxy. When that was not running (after a restart
+  of the PC, say), the address did not load and nothing said why. Now the host asks the
+  address on the PC itself, at its start and every half minute, whether it leads to Abyss
+  Remote. The window says so under Connect and Phone setup, the activity list notes each
+  change, the tray icon announces when the address stops working, and meanwhile no browser
+  is sent there: the switch and the button are not offered. While the address works, most
+  rounds only look whether the proxy still listens, and ask through it every ten minutes,
+  so the proxy's access log does not fill up. The check cannot see whether the address
+  reaches the PC from outside.
 - Requests that carry proxy headers (`X-Forwarded-For`, `Forwarded`) for any name other than
   the away address are refused with 421.
 - The demo server takes `ABYSS_REMOTE_DEMO_AWAY=<address>` to try the away screens behind a
-  test proxy.
+  test proxy, and a file called `away-down` in its folder pretends that the proxy is closed.
 
 - Phone cursor feedback is drawn immediately, independently of desktop video. Host cursor
   snapshots reconcile the position without replaying stale movement.

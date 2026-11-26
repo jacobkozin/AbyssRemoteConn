@@ -142,7 +142,6 @@ h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: cl
 .pair-card form { display: grid; gap: 8px; margin-top: 20px; }
 .pair-card input { margin-bottom: 10px; }
 .pair-card input#pairCode { font-size: 26px; letter-spacing: 5px; text-align: center; font-variant-numeric: tabular-nums; }
-.pair-card input#awayCode { font-size: 22px; letter-spacing: 3px; text-align: center; text-transform: uppercase; }
 /* A switch in a form: a box that is lagoon when off and teal with a tick when on, and its
    words. The whole row is the target. */
 .check-row { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; margin: 2px 0 10px; font-size: 15px; font-weight: 700; color: var(--foam); cursor: pointer; }
@@ -155,13 +154,6 @@ h1 { margin: 18px 0 8px; line-height: 1.15; letter-spacing: -.5px; font-size: cl
 .help > :not(summary) { margin: 0 14px 12px; }
 .help ol { padding-left: 20px; color: var(--mist); }
 .help li { margin-bottom: 6px; }
-/* Numbered steps: what to do, in order. Each number stands in a badge, so nobody has to hunt
-   for where a step starts. */
-.steps, .help .steps { display: grid; gap: 14px; padding: 0; list-style: none; counter-reset: step; color: var(--foam); font-size: 15px; line-height: 1.45; }
-.steps { margin: 14px 0 0; }
-.steps li { position: relative; min-height: 28px; margin: 0; padding-left: 40px; counter-increment: step; }
-.steps li::before { content: counter(step); position: absolute; left: 0; top: -3px; width: 28px; height: 28px; border: var(--stroke) solid var(--abyss); border-radius: var(--radius-pill); background: var(--aqua); color: var(--abyss); font-size: 14px; font-weight: 900; line-height: 24px; text-align: center; }
-.steps li > span { display: block; }
 /* A taller tap area for the link without making its line taller. */
 .help a { display: inline-block; margin: -12px 0; padding: 12px 0; }
 .footnote { margin-bottom: 0; font-size: 13px; }

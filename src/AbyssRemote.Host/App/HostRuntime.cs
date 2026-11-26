@@ -18,6 +18,8 @@ public sealed class HostRuntime : IAsyncDisposable
 {
     public const int MaxNotices = 500;
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan AwayCheckInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AwayAskInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(3);
     private static readonly JsonSerializerOptions DeviceJson = new() { PropertyNameCaseInsensitive = true };
 
@@ -32,7 +34,9 @@ public sealed class HostRuntime : IAsyncDisposable
     private volatile AwayAccess? _away; // while the server runs with away access on
     private WebApplication? _app;
     private HostCertificateSet? _certificates;
-    private System.Threading.Timer? _refreshTimer;
+    private System.Threading.Timer? _refreshTimer, _awayTimer;
+    private AwayVerdict _awayVerdict;
+    private DateTimeOffset _awayAsked; // the last time the away address was asked through the proxy
     private HostStatus _status = new(HostPhase.Stopped, new HostRunOptions(Lan: false, LaunchOptions.DefaultPort));
     private PairingCode _code = PairingCode.None;
     private IReadOnlyList<PairedDevice> _devices = [];
@@ -58,12 +62,18 @@ public sealed class HostRuntime : IAsyncDisposable
     public event Action? ConnectionsChanged;
     /// <summary>A device finished pairing just now.</summary>
     public event Action<PairedDevice>? DevicePaired;
+    /// <summary>The away address started or stopped being forwarded here.</summary>
+    public event Action? AwayChanged;
 
     public HostStatus Status { get { lock (_sync) return _status; } }
     public PairingCode PairingCode { get { lock (_sync) return _code; } }
     public IReadOnlyList<PairedDevice> Devices { get { lock (_sync) return _devices; } }
     public IReadOnlySet<string> ConnectedDeviceIds { get { lock (_sync) return _connected; } }
     public IReadOnlyList<NoticeLine> Notices { get { lock (_sync) return _notices.ToList(); } }
+
+    /// <summary>Whether the away address leads here right now. Unknown while away access is
+    /// off, and for the first moment after a start.</summary>
+    public AwayVerdict Away { get { lock (_sync) return _awayVerdict; } }
 
     /// <summary>Starts the server. The things that go wrong on a real PC (the port is taken, the
     /// settings file is damaged, the certificate store refuses) do not throw: the returned
@@ -117,24 +127,53 @@ public sealed class HostRuntime : IAsyncDisposable
         return code;
     }
 
-    /// <summary>Makes the one-time away code that adds a new device at the away address, for
-    /// the window to show when the user asks for it. It replaces the window's earlier code.
-    /// Null while the server is not running with away access on.</summary>
-    public AwayCodeOffer? NewAwayCode()
+    /// <summary>Checks now whether the away address is forwarded to this program, and says so
+    /// in the activity list when that changed. It runs by itself every half minute while away
+    /// access is on, because the proxy is another program that can be closed at any time.
+    /// Those rounds are not <paramref name="thorough"/>: while the address works they only
+    /// look whether the proxy still listens, and ask through it every ten minutes, so the
+    /// proxy's access log does not fill with this program's own visits.</summary>
+    public async Task CheckAwayAsync(bool thorough = true)
     {
-        if (_away is not { } away) return null;
-        var (code, expires) = away.Codes.Issue(AwayCodes.NewDevice);
-        AddNotice("An away code for a new device was shown in this window.");
-        // The code travels in the fragment, like a pairing code: it never reaches a request log.
-        return new AwayCodeOffer(AwayCodes.Format(code), $"{away.Url}/#pair={code}", away.Url, expires);
+        if (_away is not { } away) return;
+        var now = _env.Clock.GetUtcNow();
+        bool quick;
+        lock (_sync) quick = !thorough && _awayVerdict == AwayVerdict.Working && now - _awayAsked < AwayAskInterval;
+        AwayVerdict verdict;
+        try
+        {
+            verdict = !quick ? await _env.CheckAway(away.Host).ConfigureAwait(false)
+                : await _env.AwayListening().ConfigureAwait(false) ? AwayVerdict.Working : AwayVerdict.NotAnswering;
+        }
+        catch (Exception) { verdict = AwayVerdict.NotAnswering; }
+        if (!ReferenceEquals(_away, away)) return; // restarted or stopped meanwhile
+        if (!quick) lock (_sync) _awayAsked = now;
+        SetAway(verdict, away.Url);
     }
 
-    /// <summary>Takes the window's away code back when it is no longer shown, so a code nobody
-    /// used stops working at once.</summary>
-    public void CancelAwayCode() => _away?.Codes.Cancel(AwayCodes.NewDevice);
+    private void SetAway(AwayVerdict verdict, string? url)
+    {
+        AwayVerdict before;
+        lock (_sync)
+        {
+            before = _awayVerdict;
+            _awayVerdict = verdict;
+        }
+        if (before == verdict) return;
+        if (verdict == AwayVerdict.Working) AddNotice($"The away address works: {url} leads to Abyss Remote.");
+        else if (verdict == AwayVerdict.NotAnswering) AddNotice($"The away address {url} does not answer: the web server on this PC that forwards it is not running. Devices only work at home until it is started.");
+        else if (verdict == AwayVerdict.SomethingElse) AddNotice($"The away address {url} is answered by something else on this PC, not by Abyss Remote. Check the web server that should forward it.");
+        AwayChanged?.Invoke();
+    }
 
-    /// <summary>True while the window's away code could still be used.</summary>
-    public bool AwayCodeOpen => _away?.Codes.IsOpen(AwayCodes.NewDevice) == true;
+    /// <summary>Makes the current pairing code useless, so nothing can be paired until someone
+    /// asks for a new one.</summary>
+    public void DropPairingCode()
+    {
+        _pairing.Clear();
+        lock (_sync) _code = PairingCode.None;
+        PairingCodeChanged?.Invoke();
+    }
 
     /// <summary>Removes one paired device and closes its connections at once.</summary>
     public bool RevokeDevice(string id)
@@ -249,6 +288,7 @@ public sealed class HostRuntime : IAsyncDisposable
                 Pairing = _pairing,
                 Protection = new RequestProtection(hosts),
                 Away = away,
+                AwayWorks = () => Away == AwayVerdict.Working,
                 Sessions = _sessions,
                 Desktop = _env.Desktop,
                 Clipboard = _env.Clipboard,
@@ -286,9 +326,14 @@ public sealed class HostRuntime : IAsyncDisposable
             if (certificates.Notice is not null) AddNotice(certificates.Notice);
             if (expired > 0) AddNotice($"Removed {expired} device(s) whose 30-day pairing expired.");
             if (awayKeysRemoved > 0) AddNotice($"Away access is off, so {awayKeysRemoved} device(s) lost their away setup.");
-            if (away is not null) AddNotice($"Away access is on: devices set up for it can use {away.Url}.");
+            if (away is not null) AddNotice($"Away access is on: devices can pair at {away.Url} and use it at home and away.");
             RefreshDevices();
             _refreshTimer = new System.Threading.Timer(_ => RefreshDevices(), null, RefreshInterval, RefreshInterval);
+            if (away is not null)
+            {
+                _awayTimer = new System.Threading.Timer(_ => _ = CheckAwayAsync(thorough: false), null, AwayCheckInterval, AwayCheckInterval);
+                _ = CheckAwayAsync(); // the first look starts now and does not hold the start up
+            }
             return status;
         }
         catch (Exception ex)
@@ -316,7 +361,11 @@ public sealed class HostRuntime : IAsyncDisposable
         }
         _refreshTimer?.Dispose();
         _refreshTimer = null;
+        _awayTimer?.Dispose();
+        _awayTimer = null;
         _away = null; // its codes go with it
+        lock (_sync) _awayAsked = default;
+        SetAway(AwayVerdict.Unknown, null);
         if (app is null) return;
 
         // Tell browsers to reconnect, then give their connections a moment to close. Whatever

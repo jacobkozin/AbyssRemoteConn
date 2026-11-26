@@ -122,15 +122,17 @@ internal sealed class ProblemCard : Card
 }
 
 /// <summary>How to connect: the address to open, the pairing code with its remaining time,
-/// and in home-network mode a QR code that holds both. With away access on, also the address
-/// that works at home and away, and the button that shows the code for it.</summary>
+/// and a QR code that holds both. While the away address works, that is the address shown:
+/// it works at home and away. When away access is on but the address is not forwarded here,
+/// the card says so.</summary>
 internal sealed class ConnectCard : Card
 {
-    private readonly RaisedButton _copy, _newCode, _awayCode;
+    private readonly RaisedButton _copy, _newCode;
     private readonly System.Windows.Forms.Timer _copiedTimer = new() { Interval = 1500 };
     private HostStatus? _status;
     private PairingCode _code = PairingCode.None;
     private DateTimeOffset _now;
+    private AwayVerdict _away;
     private Bitmap? _qr;
     private (string Text, int Pixels) _qrKey;
 
@@ -138,8 +140,6 @@ internal sealed class ConnectCard : Card
     {
         _copy = Add(new RaisedButton("Copy address"));
         _newCode = Add(new RaisedButton("New code", ButtonKind.Primary));
-        _awayCode = Add(new RaisedButton("Show away code") { Visible = false });
-        _awayCode.Click += (_, _) => Actions.ShowAwayCode();
         _newCode.Click += (_, _) => Actions.NewPairingCode();
         _copy.Click += (_, _) =>
         {
@@ -155,11 +155,11 @@ internal sealed class ConnectCard : Card
         };
     }
 
-    public void Show(HostStatus status, PairingCode code, DateTimeOffset now)
+    public void Show(HostStatus status, PairingCode code, DateTimeOffset now, AwayVerdict away = AwayVerdict.Unknown)
     {
         // The countdown changes every second, so compare what will be drawn, not the clock.
-        bool same = Equals(status, _status) && Equals(code, _code) && CodeStatus(code, now) == CodeStatus(_code, _now);
-        (_status, _code, _now) = (status, code, now);
+        bool same = Equals(status, _status) && Equals(code, _code) && away == _away && CodeStatus(code, now) == CodeStatus(_code, _now);
+        (_status, _code, _now, _away) = (status, code, now, away);
         if (!same) Invalidate();
     }
 
@@ -184,7 +184,6 @@ internal sealed class ConnectCard : Card
         int y = Header(pass, width), inner = width - 2 * Pad;
         var running = _status?.Running;
         _copy.Visible = _newCode.Visible = running is not null;
-        _awayCode.Visible = running?.AwayUrl is not null;
         if (running is null)
         {
             string waiting = _status?.Phase == HostPhase.Starting
@@ -193,19 +192,28 @@ internal sealed class ConnectCard : Card
             return y + pass.Text(waiting, Ui.Body, Palette.Muted, Pad, y, inner) + Pad;
         }
 
-        // In home-network mode the QR code sits to the right of the text, or below it when the
-        // card is narrow.
+        // While the away address works it is the one to give out: it works at home and away,
+        // and a device needs no certificate for it. The home addresses follow in small print.
+        string main = running.AddressToGiveOut(_away);
+        bool anywhere = running.AwayUrl is not null && main == running.AwayUrl;
+        bool forOtherDevices = running.Lan || anywhere;
+
+        // The QR code sits to the right of the text, or below it when the card is narrow.
         int qrSide = Ui.Px(176), gap = Ui.Px(24);
-        bool qrBeside = running.Lan && inner - qrSide - gap >= Ui.Px(250);
+        bool qrBeside = forOtherDevices && inner - qrSide - gap >= Ui.Px(250);
         int column = qrBeside ? inner - qrSide - gap : inner;
         int top = y;
 
-        string lead = running.Lan ? "Open this address on the phone, tablet or other computer:" : "Open this address in a browser on this PC:";
+        string lead = anywhere ? "Open this address on the phone, tablet or other computer. It works at home and away:"
+            : running.Lan ? "Open this address on the phone, tablet or other computer:" : "Open this address in a browser on this PC:";
         y += pass.Text(lead, Ui.Small, Palette.Muted, Pad, y, column) + Ui.Px(4);
-        y += pass.Line(running.MainUrl, Ui.Heading, Palette.Accent, Pad, y, column) + Ui.Px(2);
-        foreach (string other in running.LanUrls.Skip(1))
-            y += pass.Line($"or {other}", Ui.Small, Palette.Muted, Pad, y, column);
-        if (running.Lan) y += pass.Line($"On this PC: {running.LocalUrl}", Ui.Small, Palette.Muted, Pad, y, column);
+        // A long address gets the smaller of the two bold fonts instead of being cut off.
+        var addressFont = Ui.MeasureLine(main, Ui.Heading).Width <= column ? Ui.Heading : Ui.Bold;
+        y += pass.Line(main, addressFont, Palette.Accent, Pad, y, column) + Ui.Px(2);
+        var atHome = anywhere ? running.LanUrls : running.LanUrls.Skip(1).ToList();
+        for (int i = 0; i < atHome.Count; i++)
+            y += pass.Line(anywhere && i == 0 ? $"At home also: {atHome[i]}" : $"or {atHome[i]}", Ui.Small, Palette.Muted, Pad, y, column);
+        if (forOtherDevices) y += pass.Line($"On this PC: {running.LocalUrl}", Ui.Small, Palette.Muted, Pad, y, column);
         y += Ui.Px(10);
         pass.Place(_copy, Pad, y, _copy.WidthFor(Ui), Ui.ButtonHeight(32));
         y += Ui.ButtonHeight(32) + Ui.Px(14);
@@ -218,41 +226,30 @@ internal sealed class ConnectCard : Card
         pass.Place(_newCode, Pad, y, _newCode.WidthFor(Ui), Ui.ButtonHeight(34));
         y += Ui.ButtonHeight(34);
 
-        if (running.Lan)
+        if (forOtherDevices)
         {
             int qrX = qrBeside ? width - Pad - qrSide : Pad, qrY = qrBeside ? top : y + Ui.Px(20);
-            int qrBottom = DrawQr(pass, _code.PairingUrl(running.MainUrl, _now), qrX, qrY, qrSide, usable);
+            int qrBottom = DrawQr(pass, _code.PairingUrl(main, _now), qrX, qrY, qrSide, usable);
             y = Math.Max(y, qrBottom);
         }
-        else if (running.AwayUrl is null)
+        else
         {
             y += Ui.Px(16);
             y += pass.Text("Phones and tablets need home-network mode. Turn on “Allow devices on my home network” under Settings.",
                 Ui.Small, Palette.Muted, Pad, y, inner);
         }
-        if (running.AwayUrl is { } awayUrl) y = AwayRow(pass, width, y, awayUrl);
-        return y + Pad;
-    }
 
-    /// <summary>With away access on: the address that works at home and away, and the button
-    /// that shows the code for it. The code itself is never on this card: it appears in a box
-    /// of its own, only when asked for.</summary>
-    private int AwayRow(Pass pass, int width, int y, string awayUrl)
-    {
-        int buttonWidth = _awayCode.WidthFor(Ui), buttonHeight = Ui.ButtonHeight(32);
-        int textWidth = width - 2 * Pad - buttonWidth - Ui.Px(12);
-        y += Ui.Px(14);
-        if (pass.Graphics is { } g)
+        // Away access is on, but its address does not lead here. Abyss Remote cannot fix that:
+        // another program on this PC forwards the address. Saying so is the least it can do.
+        if (running.AwayUrl is { } awayUrl && _away is AwayVerdict.NotAnswering or AwayVerdict.SomethingElse)
         {
-            using var line = new Pen(Palette.Border, Ui.Outline);
-            g.DrawLine(line, Pad, y, width - Pad, y);
+            string trouble = _away == AwayVerdict.NotAnswering
+                ? $"Away from home does not work right now. Nothing on this PC forwards {awayUrl}: start the web server that does (for example the Gaming Hub)."
+                : $"Away from home does not work right now. Another program answers at {awayUrl}, not Abyss Remote.";
+            y += Ui.Px(14);
+            y += pass.Text(trouble, Ui.Small, Palette.Danger, Pad, y, inner);
         }
-        y += Ui.Px(12);
-        int labelHeight = pass.Line("At home and away", Ui.Bold, Palette.Accent, Pad, y, textWidth);
-        int addressHeight = pass.Line(awayUrl, Ui.Body, Palette.Text, Pad, y + labelHeight + Ui.Px(1), textWidth);
-        int rowHeight = Math.Max(labelHeight + Ui.Px(1) + addressHeight, buttonHeight);
-        pass.Place(_awayCode, width - Pad - buttonWidth, y + (rowHeight - buttonHeight) / 2, buttonWidth, buttonHeight);
-        return y + rowHeight;
+        return y + Pad;
     }
 
     /// <summary>The QR code on a white tile with a caption. Returns the y coordinate below it.</summary>
